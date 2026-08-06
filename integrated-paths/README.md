@@ -1,267 +1,258 @@
-# Linux Kernel 5.10 跨子系统执行链
+# Linux Kernel 5.10 基础执行过程
 
-本目录用于分析跨越多个内核子系统的完整执行过程。各专题会引用汇编、调度、时钟、内存、网络以及启动与崩溃转储课程中的基础知识。
+本目录把汇编、启动、内存、时钟和调度知识串联起来，用于分析一个过程怎样从入口一直运行到结束。
 
-## 为什么需要综合路径
-
-真实内核问题很少只属于一个目录。例如一次 TCP 收包可能同时涉及：
+单独学习一个子系统时，容易只看到局部函数。综合分析则需要继续回答：
 
 ```text
-网卡 DMA
-→ hardirq
-→ NAPI
-→ softirq
-→ skb 分配
-→ TCP timer
-→ socket wait queue
-→ 任务唤醒
-→ 调度运行
+当前代码处于什么执行上下文？
+CPU 状态和内核栈发生了什么变化？
+使用了哪些关键数据结构？
+是否可能阻塞、抢占或切换任务？
+内存从哪里获得，地址映射如何变化？
+时间或中断如何推动下一步执行？
 ```
 
-如果只按单一子系统阅读，容易理解局部函数，却难以说明完整过程为何这样运行。因此，本目录重点分析执行上下文、数据对象、时间顺序和子系统之间的交接关系。
+本阶段只选择最基础的执行过程。网络收发、VFS、cgroup、namespace 等专题以后再单独补充。
 
 ## 综合课程大纲
 
-### I01：用户系统调用完整路径
+### I01：用户系统调用进入和返回
 
 ```text
 用户函数
-→ libc wrapper
-→ syscall instruction
+→ syscall 指令
 → entry_SYSCALL_64
-→ pt_regs
+→ 构造 pt_regs
 → do_syscall_64
-→ __x64_sys_xxx
-→ exit to user mode
+→ 具体系统调用
+→ 返回用户态前检查
+→ sysretq 或 iretq
 ```
+
+重点分析：
+
+- 用户栈和内核栈；
+- 系统调用 ABI；
+- CPU 自动保存的状态；
+- 入口代码手工保存的状态；
+- 返回用户态前为何需要检查调度、信号和其他工作。
 
 关联：assembly、scheduler、memory。
 
-### I02：时钟中断驱动调度
+### I02：x86_64 内核正常启动
 
 ```text
-local APIC timer
-→ interrupt entry
-→ tick handler
-→ scheduler_tick
-→ task_tick
-→ TIF_NEED_RESCHED
-→ return path / preempt
-→ schedule
-→ switch_to
+引导程序
+→ 压缩内核入口
+→ 解压和重定位
+→ 早期页表
+→ startup_64
+→ x86_64_start_kernel
+→ start_kernel
+→ rest_init
+→ 第一个用户空间进程
 ```
 
-关联：assembly、timekeeping、scheduler。
+重点分析：
 
-### I03：任务睡眠与唤醒
+- 启动参数和内存地图；
+- 处理器模式和页表；
+- memblock；
+- 调度器、时钟和中断的初始化顺序；
+- 汇编代码如何把控制权交给 C 代码。
+
+关联：boot-crash、assembly、memory、timekeeping、scheduler。
+
+### I03：缺页异常
+
+```text
+CPU 访问内存
+→ 页表遍历或权限检查失败
+→ #PF
+→ 异常入口
+→ 读取 CR2 和错误码
+→ 查找 VMA
+→ 分配页或处理权限
+→ 更新页表
+→ 返回并重新执行原指令
+```
+
+重点分析：
+
+- CPU、异常入口和内存管理之间如何交接；
+- anonymous fault、file-backed fault 和 protection fault；
+- 缺页过程中何时可能分配内存或阻塞；
+- 无法处理时如何转化为信号或内核错误。
+
+关联：assembly、memory、scheduler。
+
+### I04：任务睡眠和唤醒
 
 ```text
 任务检查条件
-→ prepare_to_wait
-→ set task state
+→ 设置任务状态
+→ 加入等待队列
 → schedule
 → 事件发生
 → wake_up
 → try_to_wake_up
-→ enqueue
-→ preemption decision
+→ 加入运行队列
+→ 调度器选择任务运行
 ```
 
-关联：scheduler、memory ordering、wait queue。
+重点分析：
 
-### I04：缺页异常完整路径
+- 为什么要先设置状态再检查条件；
+- 等待队列和任务状态的关系；
+- 唤醒为何不等于立即运行；
+- 并发和内存屏障为何重要。
+
+关联：scheduler、timekeeping、memory ordering。
+
+### I05：时钟中断触发重新调度
 
 ```text
-用户内存访问
-→ page-table walk failure
-→ #PF
-→ exception entry
-→ CR2/error code
-→ VMA lookup
-→ anonymous/file/COW fault
-→ page allocation
-→ page-table update
-→ return and retry
+local APIC timer
+→ 中断入口
+→ tick handler
+→ scheduler_tick
+→ 更新当前任务运行时间
+→ 设置 TIF_NEED_RESCHED
+→ 中断返回或抢占检查
+→ schedule
 ```
 
-关联：assembly、memory、scheduler。
+重点分析：
 
-### I05：Fork 与首次写入
+- clockevent 如何产生中断；
+- tick 如何更新时间和调度统计；
+- 设置重新调度标志与真正调用 `schedule()` 的区别；
+- 中断上下文为什么不能直接进行普通睡眠。
 
-```text
-fork
-→ 复制 mm/VMA
-→ 共享只读 PTE
-→ child/parent write
-→ COW fault
-→ allocate/copy page
-→ update PTE
-```
+关联：assembly、timekeeping、scheduler。
 
-关联：memory、scheduler、TLB。
-
-### I06：网络收包到用户进程
-
-```text
-NIC DMA
-→ IRQ
-→ NAPI
-→ NET_RX_SOFTIRQ
-→ skb
-→ IP/TCP
-→ socket receive queue
-→ wake_up_interruptible
-→ try_to_wake_up
-→ scheduler
-→ recv/read returns
-```
-
-关联：network、memory、timekeeping、scheduler、assembly。
-
-### I07：用户发送到网卡
-
-```text
-send/write
-→ syscall
-→ socket send
-→ TCP/IP
-→ neighbour
-→ qdisc
-→ driver TX ring
-→ DMA
-→ completion interrupt
-→ skb free
-```
-
-关联：network、memory、timekeeping。
-
-### I08：TCP 重传
-
-```text
-send queue
-→ retransmission timer armed
-→ timer expires
-→ TCP write timer
-→ loss/retransmission decision
-→ packet retransmit
-→ congestion control update
-```
-
-关联：network、timekeeping、memory。
-
-### I09：内存压力影响网络与调度
-
-```text
-skb/page allocation
-→ allocator slow path
-→ direct reclaim/compaction
-→ task latency increase
-→ packet backlog
-→ softirq pressure
-→ drops or retransmission
-```
-
-关联：memory、network、scheduler、timekeeping。
-
-### I10：Softirq 过载与 ksoftirqd
-
-```text
-hardirq schedules NAPI
-→ softirq budget/time limit
-→ remaining work deferred
-→ wake ksoftirqd
-→ scheduler chooses ksoftirqd
-→ process-context softirq work
-```
-
-关联：network、scheduler、timekeeping。
-
-### I11：上下文切换与地址空间切换
+### I06：上下文切换和地址空间切换
 
 ```text
 schedule
+→ __schedule
 → context_switch
-→ switch_mm
-→ CR3/PCID decision
+→ switch_mm_irqs_off
+→ CR3/PCID 处理
 → switch_to
-→ kernel stack and registers restored
+→ 切换内核栈和寄存器
+→ 新任务继续执行
 ```
+
+重点分析：
+
+- 旧任务的状态保存在哪里；
+- 新任务的状态从哪里恢复；
+- 为什么切换 `RSP` 后当前任务随之变化；
+- 同一进程线程切换与不同进程切换的差别；
+- TLB 和地址空间切换的关系。
 
 关联：assembly、scheduler、memory。
 
-### I12：从内核崩溃到 Vmcore 分析
+### I07：Fork 和 Copy-on-Write
 
 ```text
-fault/oops/watchdog
+fork
+→ 复制进程地址空间描述
+→ 父子进程共享只读物理页
+→ 任一进程首次写入
+→ 写保护缺页
+→ 分配新页
+→ 复制旧内容
+→ 更新 PTE
+→ 继续执行
+```
+
+重点分析：
+
+- 为什么 fork 不立即复制全部物理页；
+- VMA、PTE、page refcount 和 mapcount 的关系；
+- COW 缺页如何连接进程创建、内存分配和页表更新。
+
+关联：memory、scheduler、assembly。
+
+### I08：Kexec 切换到新内核
+
+```text
+当前内核加载新内核
+→ 准备目标物理内存
+→ 安置过渡代码
+→ 停止其他 CPU 和设备活动
+→ machine_kexec
+→ relocate_kernel
+→ 跳转到新内核入口
+```
+
+重点分析：
+
+- 为什么 Kexec 可以绕过固件重新启动；
+- 新内核、initramfs 和命令行放在什么位置；
+- 过渡代码为什么必须独立可靠；
+- CPU 和设备状态需要怎样处理。
+
+关联：boot-crash、assembly、memory、scheduler。
+
+### I09：从 Panic 到 Vmcore
+
+```text
+内核故障
 → panic
 → crash_kexec
 → machine_crash_shutdown
-→ Kexec 过渡代码
-→ 捕获内核启动
-→ elfcorehdr
+→ 保存 CPU 状态并停止其他 CPU
+→ 启动捕获内核
+→ 读取旧内核物理内存
 → /proc/vmcore
 → makedumpfile
-→ crash
-→ 根因路径还原
+→ crash 分析
 ```
 
-本专题重点分析：
+重点分析：
 
-- 生产内核和捕获内核的职责；
-- `crashkernel=` 保留内存如何建立；
-- panic 环境中如何保存 CPU 状态并停止其他 CPU；
-- 捕获内核为什么不能覆盖生产内核留下的物理内存；
-- `/proc/vmcore`、`VMCOREINFO` 和 ELF program header 的作用；
-- `vmcore` 与匹配的 `vmlinux`、模块符号和 Build ID；
-- 调用栈展开、故障指令定位和关键对象检查；
-- Kdump 失败时如何判断问题发生在哪个阶段。
+- 生产内核与捕获内核；
+- `crashkernel=` 预留内存；
+- `elfcorehdr` 和 `VMCOREINFO`；
+- 为什么捕获内核不能覆盖旧内核内存；
+- `vmcore` 与 `vmlinux`、模块符号和 Build ID 的匹配；
+- 如何从寄存器、调用栈和故障指令还原根因。
 
-关联：boot-crash、assembly、memory、scheduler、timekeeping，以及具体故障所属的子系统。
+关联：boot-crash、assembly、memory、scheduler、timekeeping。
 
-基础课程见：[`../boot-crash/`](../boot-crash/)。
-
-## 每个综合专题的固定产物
+## 每个综合专题的内容结构
 
 ```text
-01-background.md        问题背景和总体机制
-02-call-path.md         完整调用链
-03-data-structures.md   关键数据结构与字段
-04-context.md           process/softirq/hardirq/NMI 上下文
-05-timeline.md          时间顺序和并发关系
-06-source-walk.md       Linux 5.10 源码逐层分析
-07-lab.md               可复现实验
-08-debugging.md         ftrace/perf/eBPF/crash 观测方法
+01-background.md        问题背景和总体过程
+02-call-path.md         主要调用路径
+03-data-structures.md   关键数据结构
+04-context.md           执行上下文和 CPU 状态
+05-source-walk.md       Linux 5.10 源码分析
+06-lab.md               实验和观测方法
+07-debugging.md         故障定位和结果解释
 ```
 
-## 建议使用方式
+## 建议学习方法
 
-先在各主题中完成相关基础章节，再进入综合路径。例如学习网络收包到用户进程前，至少应掌握：
+进入某个综合专题前，先完成相关的基础章节。例如学习上下文切换前，应先掌握：
 
 ```text
-assembly：寄存器、栈、异常和中断入口基础
-scheduler：task state、wake-up、schedule
-memory：page、SLUB、skb 内存基础
-timekeeping：tick、timer 基础
-network：NAPI、skb、IP/TCP、socket
+assembly：栈、函数调用、寄存器保存
+scheduler：task state、运行队列和 schedule
+memory：mm_struct、CR3 和 TLB
 ```
 
-学习 Kdump 综合路径前，建议先掌握：
+学习 Kdump 前，应先掌握：
 
 ```text
-assembly：早期入口、寄存器、栈和控制流
+assembly：启动入口、寄存器和栈
 memory：物理内存、页表和 memblock
-boot-crash：正常启动、Kexec、双内核和 vmcore
-scheduler：CPU、任务和多核停止基础
+boot-crash：正常启动、Kexec 和双内核结构
+scheduler：多 CPU 停止和任务状态的基本概念
 ```
 
-综合路径的目标不是记住更长的调用链，而是能够解释：
-
-```text
-当前在哪种执行上下文？
-数据对象由谁拥有？
-何时可能睡眠或抢占？
-哪个时钟或定时器推动事件？
-内存从哪里分配和释放？
-下一阶段为何被唤醒？
-故障发生后哪些内核服务仍然可信？
-```
+综合分析的目标不是记住一串函数名，而是能够说明每一步为什么发生，以及下一步依赖哪些状态。
