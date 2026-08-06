@@ -255,4 +255,4 @@ include/linux/skbuff.h
 include/net/sock.h
 ```
 
-当前阶段不会继续扩展本目录。进入网络专题后，再按上述大纲逐章学习。
+本专题安排在基础机制课程之后学习。
