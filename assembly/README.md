@@ -13,11 +13,13 @@
 0. [课程总纲](docs/00-course-overview.md)
 1. [CPU 执行模型、寄存器宽度与 mov](docs/01-cpu-execution-model-and-register-width.md)
 2. [地址、解引用、复杂寻址与 lea](docs/02-addressing-dereference-and-lea.md)
+3. [RFLAGS、比较、条件跳转与基本块](docs/03-rflags-comparison-and-control-flow.md)
 
 ## 实验索引
 
 1. [寄存器宽度实验](labs/01-register-width/README.md)
 2. [地址与复杂寻址实验](labs/02-addressing/README.md)
+3. [RFLAGS、比较与条件分支实验](labs/03-flags-and-branches/README.md)
 
 ## 目录职责
 
