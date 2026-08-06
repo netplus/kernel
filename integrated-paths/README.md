@@ -1,6 +1,6 @@
 # Linux Kernel 5.10 跨子系统执行链
 
-本目录不重复讲解单个子系统，而是把汇编、调度、时钟、内存和网络知识组合成完整执行路径。
+本目录用于分析跨越多个内核子系统的完整执行过程。各专题会引用汇编、调度、时钟、内存、网络以及启动与崩溃转储课程中的基础知识。
 
 ## 为什么需要综合路径
 
@@ -18,7 +18,7 @@
 → 调度运行
 ```
 
-如果只按单一子系统阅读，很容易知道每个局部函数，却无法回答“整条路径为何这样运行”。
+如果只按单一子系统阅读，容易理解局部函数，却难以说明完整过程为何这样运行。因此，本目录重点分析执行上下文、数据对象、时间顺序和子系统之间的交接关系。
 
 ## 综合课程大纲
 
@@ -189,19 +189,36 @@ schedule
 
 关联：assembly、scheduler、memory。
 
-### I12：内核崩溃与 Kdump
+### I12：从内核崩溃到 Vmcore 分析
 
 ```text
-fault/oops
+fault/oops/watchdog
 → panic
 → crash_kexec
-→ capture kernel
-→ vmcore
-→ symbols/unwind
-→ root-cause path reconstruction
+→ machine_crash_shutdown
+→ Kexec 过渡代码
+→ 捕获内核启动
+→ elfcorehdr
+→ /proc/vmcore
+→ makedumpfile
+→ crash
+→ 根因路径还原
 ```
 
-关联：assembly、memory、scheduler、network debugging。
+本专题重点分析：
+
+- 生产内核和捕获内核的职责；
+- `crashkernel=` 保留内存如何建立；
+- panic 环境中如何保存 CPU 状态并停止其他 CPU；
+- 捕获内核为什么不能覆盖生产内核留下的物理内存；
+- `/proc/vmcore`、`VMCOREINFO` 和 ELF program header 的作用；
+- `vmcore` 与匹配的 `vmlinux`、模块符号和 Build ID；
+- 调用栈展开、故障指令定位和关键对象检查；
+- Kdump 失败时如何判断问题发生在哪个阶段。
+
+关联：boot-crash、assembly、memory、scheduler、timekeeping，以及具体故障所属的子系统。
+
+基础课程见：[`../boot-crash/`](../boot-crash/)。
 
 ## 每个综合专题的固定产物
 
@@ -218,14 +235,23 @@ fault/oops
 
 ## 建议使用方式
 
-先在各维度完成相关基础章节，再进入综合路径。例如学习网络收包到用户进程前，至少应掌握：
+先在各主题中完成相关基础章节，再进入综合路径。例如学习网络收包到用户进程前，至少应掌握：
 
 ```text
-assembly：寄存器、栈、异常/中断入口基础
+assembly：寄存器、栈、异常和中断入口基础
 scheduler：task state、wake-up、schedule
 memory：page、SLUB、skb 内存基础
 timekeeping：tick、timer 基础
 network：NAPI、skb、IP/TCP、socket
+```
+
+学习 Kdump 综合路径前，建议先掌握：
+
+```text
+assembly：早期入口、寄存器、栈和控制流
+memory：物理内存、页表和 memblock
+boot-crash：正常启动、Kexec、双内核和 vmcore
+scheduler：CPU、任务和多核停止基础
 ```
 
 综合路径的目标不是记住更长的调用链，而是能够解释：
@@ -237,4 +263,5 @@ network：NAPI、skb、IP/TCP、socket
 哪个时钟或定时器推动事件？
 内存从哪里分配和释放？
 下一阶段为何被唤醒？
+故障发生后哪些内核服务仍然可信？
 ```
