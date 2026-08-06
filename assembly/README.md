@@ -1,6 +1,6 @@
 # Linux x86-64 Assembly Labs
 
-本目录用于配合 [`docs/linux-x86-64-assembly-language.md`](../docs/linux-x86-64-assembly-language.md) 学习 Linux x86-64 汇编。
+本目录用于系统学习 Linux x86-64 汇编，并逐步过渡到 Linux kernel 5.10 的启动、系统调用、中断、异常与上下文切换代码。
 
 课程采用统一闭环：
 
@@ -10,6 +10,7 @@
 
 ## 课程索引
 
+0. [课程总纲](docs/00-course-overview.md)
 1. [CPU 执行模型、寄存器宽度与 mov](docs/01-cpu-execution-model-and-register-width.md)
 2. [地址、解引用、复杂寻址与 lea](docs/02-addressing-dereference-and-lea.md)
 
@@ -17,6 +18,14 @@
 
 1. [寄存器宽度实验](labs/01-register-width/README.md)
 2. [地址与复杂寻址实验](labs/02-addressing/README.md)
+
+## 目录职责
+
+```text
+assembly/README.md        课程导航和实验入口
+assembly/docs/            课程总纲与逐课教程
+assembly/labs/            可编译、可调试的配套实验
+```
 
 ## 默认环境
 
