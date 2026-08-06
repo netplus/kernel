@@ -1,18 +1,27 @@
-# Lab 02：地址、解引用、比例寻址与 `lea`
+# Lab 02：复合取址、结构体布局与 `lea`
 
-## 1. 实验目的
+## 1. 实验目标
 
-本实验验证以下区别：
+本实验从简单数组扩展到真实程序中常见的复合对象：
 
 ```text
-寄存器中的地址值
-地址处的数据
-带偏移的内存访问
-base + index × scale + displacement
-lea 只计算地址、不访问内存
-RIP-relative 地址获取
-lea 用于整数乘加
+一维数组
+结构体成员
+结构体数组
+结构体内数组
+嵌套结构体
+连续二维数组
+指针数组与多级解引用
+lea 地址计算与整数乘加
 ```
+
+核心方法：
+
+```text
+对象地址 = 基址 + 下标×对象大小 + 成员偏移
+```
+
+若对象继续嵌套，就继续叠加偏移或执行下一次解引用。
 
 对应主文档：
 
@@ -20,355 +29,240 @@ lea 用于整数乘加
 assembly/docs/02-addressing-dereference-and-lea.md
 ```
 
+---
+
 ## 2. 文件说明
 
 ```text
-README.md             实验步骤
-addressing.s          纯汇编实验程序
-companion.c           数组、结构体和乘加的 C 对照代码
-Makefile              构建、运行、反汇编和调试入口
-gdb.cmd               GDB 自动单步观察脚本
-expected-analysis.md  每条指令的预期状态
+addressing.s          纯汇编综合实验
+companion.c           C 表达式与优化汇编对照
+layout_demo.c         sizeof/offsetof 运行时验证
+Makefile              构建、运行和调试入口
+gdb.cmd               分阶段观察地址和寄存器
+expected-analysis.md  逐项地址公式与预期结果
 ```
 
-## 3. 环境准备
+---
 
-Debian/Ubuntu：
-
-```bash
-sudo apt install build-essential binutils gdb make
-```
-
-openEuler/RHEL：
-
-```bash
-sudo dnf install gcc binutils gdb make
-```
-
-确认：
-
-```bash
-gcc --version
-as --version
-ld --version
-objdump --version
-gdb --version
-```
-
-## 4. 构建
+## 3. 构建与运行
 
 ```bash
 cd assembly/labs/02-addressing
 make clean all
-```
-
-将生成：
-
-```text
-addressing.o
-addressing
-companion-O0.s
-companion-O2.s
-```
-
-汇编程序直接使用 GNU assembler 和 linker：
-
-```bash
-as --64 -g -o addressing.o addressing.s
-ld -o addressing addressing.o
-```
-
-它不依赖 libc，入口是 `_start`。
-
-## 5. 运行验证
-
-```bash
 make run
 ```
 
 预期：
 
 ```text
-exit status=15 (expected 15)
+exit status=168 (expected 168)
 ```
 
-退出状态来自：
-
-```asm
-leaq 5(%rsi,%rsi,4), %r11
-```
-
-此时：
+校验和来自：
 
 ```text
-RSI = 2
-R11 = 5 + 2 + 2 × 4 = 15
+long_array[2]       = 3
+records[1].value    = 22
+bucket.values[2]    = 7
+outer.in.value      = 44
+matrix[1][2]        = 7
+rows[1][2]          = 70
+lea arithmetic      = 15
+--------------------------------
+total               = 168
 ```
 
-随后：
+---
 
-```asm
-movq $60, %rax
-movq %r11, %rdi
-syscall
-```
-
-执行 `exit(15)`。
-
-## 6. 查看数组的内存布局
-
-源代码：
-
-```asm
-array:
-    .quad 10, 20, 30, 40
-```
-
-每个元素占 8 字节，因此布局是：
-
-```text
-array + 0   = 10
-array + 8   = 20
-array + 16  = 30
-array + 24  = 40
-```
-
-使用 GDB：
-
-```gdb
-x/4gd &array
-x/4gx &array
-```
-
-`gd` 以十进制 8 字节整数显示，`gx` 以十六进制 8 字节整数显示。
-
-## 7. 反汇编
+## 4. 先观察结构体布局
 
 ```bash
-make disasm
+make layout
 ```
 
-Makefile 会分别显示 AT&T 和 Intel 语法。
-
-重点对照：
-
-```asm
-# AT&T
-movq (%rbx,%rsi,8), %r8
-leaq 16(%rbx), %r9
-
-# Intel
-mov r8, QWORD PTR [rbx+rsi*8]
-lea r9, [rbx+0x10]
-```
-
-回答：
-
-1. 哪一条访问内存？
-2. 哪一条只计算地址？
-3. `8` 在第一条中表示什么？
-4. `16` 在第二条中表示字节还是元素个数？
-
-答案：
+典型输出：
 
 ```text
-mov 访问内存，lea 不访问。
-8 是比例因子，对应元素大小 8 字节。
-16 是字节位移。
+sizeof(struct sample) = 16
+  id=0 flags=4 value=8
+sizeof(struct record) = 24
+  id=0 flags=4 value=8 stamp=16
+sizeof(struct bucket) = 24
+  count=0 values=8
+sizeof(struct inner) = 16
+sizeof(struct outer) = 24
+  seq=0 in=8 in.value=16
 ```
 
-## 8. GDB 自动观察
+这些数字不是教学假设，而是编译器和 ABI 共同确定的实际布局。
 
-```bash
-make gdb
-```
+---
 
-脚本会：
-
-1. 在 `_start` 处断下；
-2. 显示数组地址和四个元素；
-3. 对前 11 条指令逐条 `si`；
-4. 显示关键寄存器；
-5. 在最终 `syscall` 前核对 `RAX=60`、`RDI=15`、`R11=15`。
-
-手工调试也可使用：
-
-```bash
-gdb -q ./addressing
-```
-
-```gdb
-break _start
-run
-set disassembly-flavor att
-x/i $rip
-info registers rax rbx rcx rdx rsi r8 r9 r10 r11
-x/4gd &array
-si
-```
-
-## 9. 逐条实验任务
-
-### 任务 1：地址与数据
-
-执行：
-
-```asm
-leaq array(%rip), %rbx
-movq %rbx, %rax
-movq (%rbx), %rcx
-```
-
-记录：
-
-```text
-RBX = ?
-RAX = ?
-RCX = ?
-```
-
-判断哪些寄存器保存地址，哪个寄存器保存数组元素。
-
-### 任务 2：位移访问
-
-分析：
-
-```asm
-movq 8(%rbx), %rdx
-```
-
-验证：
-
-```text
-RDX = 20
-```
-
-把位移改为 `24`，重新构建后应读到 `40`。
-
-### 任务 3：比例索引
-
-分析：
-
-```asm
-movq $2, %rsi
-movq (%rbx,%rsi,8), %r8
-```
-
-把 `RSI` 改为 `3`，应读到 `40`。
-
-再把 scale 错改为 `4`，观察读取结果。此时地址落在 8 字节元素中间，读取到的 8 字节会跨越两个相邻元素，结果取决于小端字节布局。该实验用于说明：
-
-```text
-有效地址合法，不代表数据类型语义正确
-```
-
-### 任务 4：`lea` 后再解引用
-
-```asm
-leaq 16(%rbx), %r9
-movq (%r9), %r10
-```
-
-在两条指令之间观察：
-
-```gdb
-p/x $r9
-x/gd $r9
-```
-
-确认 `R9` 只是地址，`R10` 才是读取出的值。
-
-### 任务 5：`lea` 整数算术
-
-修改：
-
-```asm
-leaq 5(%rsi,%rsi,4), %r11
-```
-
-尝试实现：
-
-```text
-3*x
-9*x
-8*x+7
-```
-
-参考：
-
-```asm
-leaq (%rsi,%rsi,2), %r11      # 3*x
-leaq (%rsi,%rsi,8), %r11      # 9*x
-leaq 7(,%rsi,8), %r11         # 8*x+7
-```
-
-## 10. C 代码对照
-
-查看：
+## 5. 查看编译器如何翻译 C
 
 ```bash
 make c-asm
 ```
 
-重点在 `companion-O2.s` 中定位：
+重点搜索：
 
 ```text
 array_get
+array_element_address
 member_get
+record_value_get
+bucket_value_get
+nested_value_get
+matrix_get
+pointer_matrix_get
 scale_add
 ```
 
-预期核心形式：
+典型模式：
 
 ```asm
 array_get:
     movq (%rdi,%rsi,8), %rax
 
-member_get:
-    movq 8(%rdi), %rax
+array_element_address:
+    leaq (%rdi,%rsi,8), %rax
 
-scale_add:
-    leaq 5(%rdi,%rdi,4), %rax
+record_value_get:
+    leaq (%rsi,%rsi,2), %rax
+    movq 8(%rdi,%rax,8), %rax
+
+pointer_matrix_get:
+    movq (%rdi,%rsi,8), %rax
+    movq (%rax,%rdx,8), %rax
 ```
 
-比较 `-O0` 和 `-O2`：
+不要要求不同 GCC 版本生成完全相同的指令；只需验证最终地址公式等价。
+
+---
+
+## 6. 反汇编与语法对照
+
+```bash
+make disasm
+```
+
+AT&T：
+
+```asm
+movq 8(%rbx,%rax,8), %r9
+```
+
+Intel：
+
+```asm
+mov r9, QWORD PTR [rbx+rax*8+0x8]
+```
+
+统一解释：
 
 ```text
--O0 通常把参数和临时变量写入栈
--O2 倾向直接使用参数寄存器和复杂寻址
+EA = RBX + RAX×8 + 8
+读取 8 字节到 R9
 ```
 
-## 11. 深入实验：观察小端序
+---
 
-在 GDB 中：
+## 7. GDB 分阶段观察
+
+```bash
+make gdb
+```
+
+脚本会在以下位置停下：
+
+```text
+after_array
+after_struct_array
+after_embedded_array
+after_nested_struct
+after_matrix
+after_pointer_chain
+after_lea_arithmetic
+```
+
+每个阶段都显示关键寄存器和预期地址公式。
+
+手工观察示例：
 
 ```gdb
-x/32bx &array
+break _start
+run
+x/4gd &long_array
+x/12wx &records
+x/12gd &matrix
+x/2gx &rows
 ```
 
-第一个 `.quad 10` 在内存中通常表现为：
+---
 
-```text
-0a 00 00 00 00 00 00 00
+## 8. 分层练习
+
+### 基础练习：数组和成员
+
+1. 把 `long_array[2]` 改为 `[3]`，预期读到 4。
+2. 把 `bucket.values[2]` 改为 `[0]`，写出新 EA。
+3. 解释为什么 `movl` 和 `movq` 读取结果不同。
+
+### 进阶练习：结构体数组
+
+1. 手工计算 `records[1].stamp` 的地址。
+2. 修改汇编读取该值，预期得到 202。
+3. 将 `struct record` 增加一个 `char tag`，运行 `make layout`，观察大小和偏移是否变化。
+
+### 进阶练习：二维数组
+
+1. 修改为读取 `matrix[2][3]`，预期得到 12。
+2. 写出线性下标和字节偏移。
+3. 比较 `matrix_get` 和 `pointer_matrix_get` 的解引用次数。
+
+### 深入练习：指针链
+
+在 GDB 中停在 `after_pointer_chain` 之前：
+
+```gdb
+x/2gx &rows
+x/3gd row1
 ```
 
-这是 x86 的 little-endian 布局：最低有效字节位于最低地址。
+逐条执行：
 
-本实验不系统展开字节序；后续分析网络协议头时会专门讨论主机字节序和网络字节序。
+```asm
+movq (%rbx,%rsi,8), %rax
+movq (%rax,%rdx,8), %r13
+```
 
-## 12. 实验报告建议
+明确第一条取得地址，第二条才取得元素值。
 
-记录以下内容：
+### 关联练习：`container_of`
 
-1. `array` 的实际运行地址；
-2. 每条指令执行后的关键寄存器；
-3. 每个内存操作数的 EA 公式；
-4. `mov` 和 `lea` 的访存差异；
-5. AT&T 与 Intel 语法对照；
-6. `companion.c` 在 `-O0/-O2` 下的差异；
-7. 修改 scale 后出现异常数据的原因。
+假设成员地址位于 `RDI`，成员在结构体中的偏移为 16：
 
-完整预期结果见：
+```asm
+leaq -16(%rdi), %rax
+```
+
+说明为什么这可以恢复外层结构体地址。
+
+---
+
+## 9. 实验报告建议
+
+至少记录：
+
+1. 每个数据结构的 `sizeof` 和关键 `offsetof`；
+2. 七个实验对象的地址公式；
+3. 每项发生了几次解引用；
+4. 每条读取指令的访问宽度；
+5. 连续二维数组和指针数组的布局差异；
+6. `lea` 和 `mov` 的区别；
+7. GCC `-O0` 与 `-O2` 的主要差异。
+
+详细答案见：
 
 ```text
 expected-analysis.md
