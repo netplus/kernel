@@ -133,5 +133,3 @@ Netfilter、traffic control 和 eBPF
 主要汇编语法：AT&T
 用户态 ABI：System V AMD64 ABI
 ```
-
-涉及其他内核版本时，课程会先以 Linux 5.10 说明基本机制，再补充主要差异。
