@@ -2,8 +2,6 @@
 
 网络协议栈不属于当前“内核基础机制”学习阶段。完成汇编、x86_64 启动、内存管理、时钟、调度、Kexec、Kdump 和 vmcore 分析后，再进入本专题。
 
-本文件是 `network/` 目录唯一的课程大纲。后续具体章节放在 `docs/`，实验放在 `labs/`，源码调用路径放在 `source-paths/`。
-
 ## 学习主线
 
 接收方向：
@@ -257,13 +255,4 @@ include/linux/skbuff.h
 include/net/sock.h
 ```
 
-## 目录结构
-
-```text
-network/README.md        本领域唯一的课程大纲
-network/docs/            具体章节教程
-network/labs/            实验和调试记录
-network/source-paths/    源码入口、调用路径和关键数据结构
-```
-
-当前阶段不会继续扩展本目录。进入网络专题后，再按上述大纲逐章编写。
+当前阶段不会继续扩展本目录。进入网络专题后，再按上述大纲逐章学习。
