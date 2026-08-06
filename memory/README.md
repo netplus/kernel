@@ -1,114 +1,122 @@
-# Linux Kernel 5.10 内存管理课程
+# Linux Kernel 5.10 内存管理基础
 
-本目录研究“虚拟地址如何映射到物理内存、物理页如何分配、对象如何缓存，以及内存不足时如何回收”。
+本目录学习虚拟地址如何映射到物理内存、物理页如何分配、内核对象如何管理，以及内存不足时如何回收。
 
 ## 课程主线
 
 ```text
-启动阶段发现物理内存
-→ 建立页表和虚拟地址空间
-→ 管理物理页
-→ 为内核对象和用户进程分配内存
-→ 处理缺页
-→ 缓存文件数据
-→ 回收、压缩或 OOM
+启动阶段获得物理内存信息
+→ 建立早期页表和内核地址空间
+→ 使用 memblock 管理启动期内存
+→ 将空闲页交给伙伴系统
+→ 使用 SLUB 分配内核对象
+→ 建立进程地址空间和 VMA
+→ 处理缺页和 Copy-on-Write
+→ 回收内存或触发 OOM
 ```
+
+本阶段重点研究内存管理的基础机制。NUMA 自动平衡、设备 DMA、网络缓冲区、memory cgroup 和复杂的大页优化不在本阶段系统展开。
 
 ## 课程大纲
 
-### M00：内存管理全景
+### M00：内存管理概览
 
 - 虚拟地址与物理地址；
 - 用户空间与内核空间；
-- page、folio 概念在 5.10 前后的关系；
-- 页表、物理页分配器、对象分配器、VMA、page cache 的职责边界。
+- 页表、物理页分配器、对象分配器、VMA 和 page cache 的职责；
+- 启动期内存管理与运行期内存管理的区别。
 
 ### M01：x86-64 多级页表
 
-- PGD、P4D、PUD、PMD、PTE；
+- PGD、P4D、PUD、PMD 和 PTE；
 - 虚拟地址拆分；
-- page offset；
-- present、RW、US、NX、accessed、dirty；
-- CR3、TLB、PCID；
-- huge page；
-- 与 [`assembly/`](../assembly/) 中控制寄存器和异常入口的联系。
+- 页大小和页内偏移；
+- present、RW、US、NX、accessed 和 dirty；
+- CR3；
+- TLB；
+- PCID 只建立基本认识；
+- 大页只说明页表层级上的差异。
 
 ### M02：内核虚拟地址布局
 
+- kernel text 和 data；
 - direct mapping；
-- kernel text/data；
-- vmalloc；
-- modules；
+- vmalloc 区域；
+- modules 区域；
 - fixmap；
-- per-CPU；
+- per-CPU 区域；
 - KASLR；
-- `virt_to_phys` 的适用边界。
+- 虚拟地址与物理地址转换的适用范围。
 
 ### M03：启动期 Memblock
 
-- firmware/bootloader 提供的内存地图；
-- `memblock.memory` 与 `memblock.reserved`；
-- region 合并和裁剪；
+- 固件或引导程序提供的内存地图；
+- `memblock.memory`；
+- `memblock.reserved`；
+- region 合并、裁剪和预留；
 - early allocation；
+- `crashkernel` 等保留区域；
 - 将可用内存交给伙伴系统。
 
-### M04：Page、Zone、Node 与 NUMA
+### M04：Page、Zone 和 Node
 
 - `struct page`；
 - PFN；
-- zone；
-- `ZONE_DMA`、`ZONE_DMA32`、`ZONE_NORMAL`；
+- `ZONE_DMA`、`ZONE_DMA32` 和 `ZONE_NORMAL`；
 - `pglist_data`；
-- NUMA node；
+- node 和 zone 的关系；
 - zonelist；
-- watermarks。
+- watermark；
+- NUMA 只讲解理解这些结构所需的基本概念。
 
 ### M05：伙伴系统
 
 - order；
 - free area；
-- split 与 merge；
-- `alloc_pages`；
+- block split；
+- buddy merge；
+- `alloc_pages()`；
 - GFP flags；
 - per-CPU page lists；
 - fragmentation；
-- slow path。
+- allocation fast path 和 slow path。
 
-### M06：SLAB/SLUB 对象分配
+### M06：SLUB 对象分配
 
-- 为什么不能所有小对象都按页分配；
+- 为什么小对象不直接按页分配；
 - `kmem_cache`；
-- slab、page、object；
+- slab、page 和 object；
 - per-CPU freelist；
 - partial list；
 - `kmalloc` size class；
-- redzone、poison、KASAN。
+- 对象构造和释放；
+- redzone、poison 和 KASAN 只作调试关联说明。
 
-### M07：vmalloc、ioremap 与非连续内存
+### M07：Vmalloc 和非连续内存
 
 - 物理连续与虚拟连续；
-- `vmalloc`；
-- 页表映射；
-- `ioremap`；
-- MMIO；
-- TLB flush；
-- `kmalloc` 与 `vmalloc` 的选择。
+- `vmalloc()`；
+- 为非连续物理页建立连续虚拟映射；
+- 页表建立和 TLB 刷新；
+- `kmalloc` 与 `vmalloc` 的选择；
+- `ioremap` 只说明与普通内存映射的区别。
 
-### M08：进程地址空间与 VMA
+### M08：进程地址空间和 VMA
 
 - `mm_struct`；
 - `vm_area_struct`；
-- mmap region；
-- code、data、heap、stack、shared library；
-- `mmap`、`munmap`、`mprotect`；
-- VMA 查找与合并。
+- code、data、heap、stack 和 mmap region；
+- VMA 查找；
+- VMA 合并和拆分；
+- `mmap()`、`munmap()` 和 `mprotect()` 只围绕地址空间变化展开。
 
 ### M09：缺页异常
 
 核心路径：
 
 ```text
-CPU memory access
+CPU 内存访问
+→ 页表遍历失败或权限检查失败
 → #PF
 → exc_page_fault
 → handle_page_fault
@@ -116,98 +124,63 @@ CPU memory access
 → handle_mm_fault
 ```
 
-重点：
+重点包括：
 
 - demand paging；
 - anonymous fault；
-- file fault；
+- file-backed fault 的基本过程；
 - protection fault；
 - stack growth；
 - SIGSEGV；
-- exception table。
+- exception table；
+- 缺页处理完成后为什么能够重新执行原指令。
 
-### M10：匿名内存与 Copy-on-Write
+### M10：匿名内存和 Copy-on-Write
 
 - zero page；
 - anonymous page；
-- fork；
-- read-only shared mapping；
+- fork 后共享只读 PTE；
 - write fault；
-- page copy；
-- refcount 与 mapcount。
+- 分配新页；
+- 复制旧内容；
+- 更新 PTE；
+- refcount 和 mapcount。
 
-### M11：文件映射与 Page Cache
+### M11：Page Cache 基础
 
-- address_space；
-- radix tree/XArray；
-- buffered I/O；
-- read fault；
+- `address_space`；
+- page cache 的作用；
+- buffered read；
+- file-backed page fault；
 - dirty page；
 - writeback；
-- readahead；
-- mmap 与 read/write 的统一缓存基础。
+- readahead 只建立基本认识；
+- 本阶段不展开 VFS 和具体文件系统实现。
 
 ### M12：内存回收
 
+- anonymous 与 file page；
+- active 与 inactive；
 - LRU；
-- active/inactive；
-- anonymous/file；
 - direct reclaim；
 - kswapd；
 - shrinker；
-- writeback；
-- reclaim 与延迟抖动。
+- dirty page 与 writeback；
+- 回收为何可能造成较长延迟。
 
-### M13：内存压缩与 THP
-
-- external fragmentation；
-- compaction；
-- migration；
-- transparent huge page；
-- khugepaged；
-- huge fault；
-- split huge page。
-
-### M14：NUMA 策略与自动平衡
-
-- local/remote memory；
-- NUMA policy；
-- first touch；
-- automatic NUMA balancing；
-- page migration；
-- CPU affinity 与内存 locality。
-
-### M15：DMA 与设备内存
-
-- DMA address；
-- coherent 与 streaming DMA；
-- scatter-gather；
-- IOMMU；
-- bounce buffer；
-- page pinning；
-- 网络驱动 RX/TX ring 与 DMA。
-
-### M16：网络栈内存
-
-- `sk_buff`；
-- head/data/tail/end；
-- page frag；
-- `napi_alloc_skb`；
-- socket memory accounting；
-- TCP send/receive queue；
-- zero-copy；
-- 与 [`network/`](../network/) 的交叉关系。
-
-### M17：OOM 与内存故障分析
+### M13：分配失败、OOM 和故障分析
 
 - allocation failure；
+- watermark 和 reclaim 失败；
+- fragmentation；
 - OOM killer；
 - badness；
-- memcg OOM；
-- leak；
-- fragmentation；
-- `slabtop`、`vmstat`、`buddyinfo`、`pagetypeinfo`；
-- crash 中分析 page、slab 和进程地址空间。
+- 内存泄漏；
+- `vmstat`；
+- `buddyinfo`；
+- `pagetypeinfo`；
+- `slabtop`；
+- crash 中查看 page、slab、VMA 和进程地址空间。
 
 ## 推荐源码入口
 
@@ -221,8 +194,6 @@ mm/memory.c
 mm/mmap.c
 mm/filemap.c
 mm/vmscan.c
-mm/compaction.c
-mm/huge_memory.c
 mm/oom_kill.c
 include/linux/mm_types.h
 include/linux/mm.h
@@ -232,18 +203,19 @@ include/linux/mm.h
 
 ```text
 手工拆解一个虚拟地址的页表索引
-查看 /proc/<pid>/maps 与 pagemap
-跟踪一次匿名缺页和 COW
-观察伙伴系统 order 分布
+查看进程地址空间布局
+跟踪一次匿名缺页
+跟踪一次 Copy-on-Write
+观察伙伴系统各 order 的空闲页
 比较 kmalloc 与 vmalloc
-制造 page cache 与回收压力
-观察 NUMA locality
-分析 skb 和 page frag 的内存布局
+制造可控内存压力并观察回收
+使用 crash 查看 page、slab 和 VMA
 ```
 
-## 与其他维度的关系
+## 与其他主题的关系
 
-- 汇编：页表、CR3、TLB 和 #PF 入口；
-- 调度：NUMA 迁移、内核栈、阻塞回收；
-- 时钟：回收、writeback、定时统计与超时；
-- 网络：skb、DMA、socket 缓冲区和零拷贝。
+- 汇编：CR3、页表、TLB 和缺页异常入口；
+- 启动：早期页表、内存地图、memblock 和 crashkernel 预留；
+- 调度：缺页、回收和内存等待可能使任务阻塞；
+- 时钟：回收和写回中的时间统计与延迟观测；
+- Kdump：捕获内核如何访问旧内核物理内存并生成 vmcore。
