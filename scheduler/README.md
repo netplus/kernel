@@ -1,93 +1,99 @@
-# Linux Kernel 5.10 调度子系统课程
+# Linux Kernel 5.10 调度基础
 
-本目录研究“谁在 CPU 上运行、运行多久、何时切换、如何唤醒和迁移”。
+本目录学习任务如何进入运行队列、如何被选中运行，以及何时发生阻塞、唤醒、抢占和上下文切换。
 
 ## 学习目标
 
-完成本维度后，应能够沿 Linux 5.10 源码解释：
+完成本部分后，应能够沿 Linux 5.10 源码说明：
 
 ```text
-任务创建或唤醒
-→ 进入运行队列
-→ 选择下一个任务
+任务进入可运行状态
+→ 加入运行队列
+→ 调度器选择任务
+→ 任务在 CPU 上运行
+→ 任务阻塞、被抢占或主动让出 CPU
 → 上下文切换
-→ 运行时间统计
-→ 抢占或阻塞
-→ 再次调度
+→ 任务再次被唤醒和调度
 ```
+
+本阶段重点研究调度器的基本工作过程。CPU cgroup、调度组带宽控制和更复杂的资源隔离不在本阶段展开。
 
 ## 课程大纲
 
-### S00：调度问题背景与任务模型
+### S00：任务和调度问题
 
-- 进程、线程和 `task_struct`；
-- task state；
-- runnable、running、sleeping；
+- 进程、线程与 `task_struct`；
+- running、runnable、sleeping；
+- 任务状态；
 - CPU-bound 与 I/O-bound；
-- 调度策略、优先级和公平性的基本矛盾。
+- 调度器需要处理的公平性、响应时间和优先级问题。
 
-### S01：调度器总体架构
+### S01：调度器总体结构
 
-- 每 CPU `struct rq`；
+- 每 CPU 运行队列 `struct rq`；
 - `sched_class`；
-- stop、deadline、rt、fair、idle 的类层次；
-- `schedule()`、`__schedule()`；
-- 为什么调度器采用分层策略接口。
+- fair、rt、deadline、idle 等调度类；
+- `schedule()` 和 `__schedule()`；
+- 调度类之间的选择顺序。
 
-### S02：CFS 基本模型
+### S02：CFS 的基本模型
 
-- `nice`、weight；
+- `nice` 与权重；
 - `vruntime`；
 - `min_vruntime`；
-- Linux 5.10 CFS 红黑树；
-- 选择最左任务；
-- 时间片为什么不是固定常量。
+- Linux 5.10 中的红黑树；
+- 为什么选择最左侧任务；
+- 公平运行时间如何转换为虚拟运行时间。
 
-### S03：任务入队、出队与运行时间统计
+### S03：任务入队、出队和运行时间统计
 
-- `enqueue_task_fair`；
-- `dequeue_task_fair`；
-- `update_curr`；
-- `exec_start`、`sum_exec_runtime`；
-- 时间统计与 timekeeping/scheduler clock 的关系。
+- `enqueue_task_fair()`；
+- `dequeue_task_fair()`；
+- `update_curr()`；
+- `exec_start`；
+- `sum_exec_runtime`；
+- 运行时间与 `sched_clock()` 的关系。
 
-### S04：唤醒路径
+### S04：任务睡眠和唤醒
 
 核心路径：
 
 ```text
-wake_up_process
+任务设置睡眠状态
+→ schedule
+→ 事件发生
+→ wake_up_process
 → try_to_wake_up
-→ select_task_rq
-→ ttwu_queue
-→ enqueue_task
-→ check_preempt_curr
+→ 选择目标 CPU
+→ 加入运行队列
+→ 检查是否需要抢占
 ```
 
-重点：
+重点包括：
 
-- 睡眠与唤醒的并发关系；
-- task state 检查；
+- 为什么修改任务状态和进入调度必须按规定顺序完成；
+- 等待队列的基本作用；
 - 跨 CPU 唤醒；
-- wakeup preemption；
-- 内存屏障为何重要。
+- 唤醒时的并发和内存屏障；
+- 唤醒不等于立即运行。
 
-### S05：抢占模型
+### S05：抢占和执行上下文
 
-- voluntary preemption；
 - `TIF_NEED_RESCHED`；
-- kernel preemption；
+- 主动调度和被动抢占；
+- 用户态返回前的调度检查；
+- 内核抢占；
 - preempt count；
-- hardirq、softirq、NMI 上下文；
-- 用户态返回和中断返回时的调度检查。
+- hardirq、softirq 和 NMI 上下文对调度的限制。
 
-### S06：调度时钟与周期性更新
+### S06：时钟 Tick 如何推动调度
 
 - `scheduler_tick()`；
 - `task_tick_fair()`；
-- tick 与抢占；
+- 运行时间更新；
+- 设置重新调度标志；
 - tickless 系统中的调度；
-- 与 [`timekeeping/`](../timekeeping/) 的交叉关系。
+- 与 [`timekeeping/`](../timekeeping/) 的关系。
 
 ### S07：上下文切换
 
@@ -95,6 +101,7 @@ wake_up_process
 
 ```text
 schedule
+→ __schedule
 → context_switch
 → switch_mm_irqs_off
 → switch_to
@@ -102,57 +109,43 @@ schedule
 → __switch_to
 ```
 
-重点：
+重点包括：
 
-- 保存和恢复 callee-saved 寄存器；
-- 切换内核栈；
-- `RSP` 为什么决定当前执行任务；
-- 地址空间、TLS、FS/GS、FPU 状态；
-- 与 [`assembly/`](../assembly/) 的交叉关系。
+- 保存旧任务和恢复新任务；
+- 内核栈切换；
+- callee-saved 寄存器；
+- 地址空间切换；
+- FS/GS、TLS 和扩展处理器状态；
+- 为什么切换栈后，后续代码已经属于另一个任务。
 
-### S08：SMP 负载均衡
+### S08：多核系统中的任务迁移
 
-- scheduler domain；
-- scheduling group；
-- CPU capacity；
-- periodic balance；
+- 调度域和调度组；
+- 周期性负载均衡；
 - idle balance；
-- task migration；
-- cache affinity 与公平性的权衡。
+- CPU capacity；
+- cache affinity；
+- 任务迁移的收益和代价。
 
-### S09：实时调度
+### S09：其他调度类概览
 
 - `SCHED_FIFO`；
 - `SCHED_RR`；
-- RT runqueue；
-- 优先级抢占；
-- RT throttling；
-- priority inversion 与 PI mutex。
+- Deadline 调度的 runtime、deadline 和 period；
+- 不同调度类为何需要不同的任务选择规则；
+- 本阶段只建立总体认识，不深入资源配额和带宽控制。
 
-### S10：Deadline 调度
-
-- runtime、deadline、period；
-- EDF 与 CBS；
-- admission control；
-- deadline bandwidth。
-
-### S11：调度组与 CPU cgroup
-
-- task group；
-- group scheduling；
-- CFS bandwidth；
-- quota、period、throttling；
-- cgroup v1/v2 的接口联系。
-
-### S12：调度观测与故障分析
+### S10：调度观测和故障分析
 
 - `/proc/sched_debug`；
 - `/proc/<pid>/sched`；
+- sched tracepoints；
 - `perf sched`；
-- ftrace sched events；
+- ftrace；
 - runqueue latency；
-- soft lockup、RCU stall、任务夯死；
-- crash 中查看任务和运行队列。
+- soft lockup；
+- hung task；
+- crash 中查看任务、运行队列和调用栈。
 
 ## 推荐源码入口
 
@@ -170,17 +163,17 @@ arch/x86/kernel/process_64.c
 ## 推荐实验
 
 ```text
-观察不同 nice 值的 CPU 分配
-跟踪 sleep/wakeup
+观察不同 nice 值任务的运行时间
+跟踪一次任务睡眠和唤醒
+使用 tracepoint 观察 sched_switch
 使用 perf sched 观察调度延迟
-使用 ftrace 还原一次上下文切换
-分析 CPU cgroup throttling
-构造 CPU-bound 与 I/O-bound 混合负载
+用 GDB 或 crash 分析一次上下文切换现场
+构造 CPU-bound 与周期睡眠任务并比较行为
 ```
 
-## 与其他维度的关系
+## 与其他主题的关系
 
-- 汇编：上下文切换、内核入口和寄存器保存；
-- 时钟：运行时间统计、tick 和 hrtimer；
-- 内存：任务内核栈、地址空间与 NUMA；
-- 网络：socket 唤醒、softirq 与用户任务调度。
+- 汇编：寄存器保存、内核栈和 `switch_to`；
+- 时钟：运行时间、tick 和重新调度；
+- 内存：任务地址空间、内核栈和缺页阻塞；
+- 启动：调度器初始化和第一个内核线程。
