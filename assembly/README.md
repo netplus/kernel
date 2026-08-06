@@ -1,109 +1,242 @@
-# Linux x86-64 Assembly Learning Track
+# Linux x86-64 汇编与内核入口
 
-本目录是整个 Linux kernel 5.10 学习仓库中的“机器执行与架构基础维度”。仓库总体课程地图见 [`../README.md`](../README.md)。
+本目录学习 x86-64 汇编，并为阅读 Linux kernel 5.10 的启动、系统调用、异常、中断和上下文切换代码打下基础。
 
-汇编课程负责回答：
+课程主要回答以下问题：
 
 ```text
-CPU 实际执行了什么？
-寄存器、栈、内存和标志位如何变化？
+CPU 如何执行一条指令？
+寄存器、内存、栈和标志位如何变化？
 C 代码如何转换成机器指令？
-系统调用、中断、异常和上下文切换的入口如何工作？
+函数参数、返回值和局部变量如何保存？
+用户态如何进入内核态，又如何返回？
+内核入口代码如何保存和恢复执行现场？
 ```
 
-调度、时钟、内存和网络的完整子系统知识分别放在：
+本文件是 `assembly/` 目录唯一的课程大纲。具体章节放在 `docs/`，实验放在 `labs/`。
 
-- [`../scheduler/`](../scheduler/)
-- [`../timekeeping/`](../timekeeping/)
-- [`../memory/`](../memory/)
-- [`../network/`](../network/)
-- [`../integrated-paths/`](../integrated-paths/)
+## 课程大纲
 
-本目录不会把这些子系统的全部内容塞入汇编课程，只在遇到相关指令和入口代码时建立必要联系。
+### A00：实验环境与基本工具
 
-课程采用统一闭环：
+- GCC、GNU assembler 和 linker 的分工；
+- `.c`、`.s`、`.o` 和 ELF 文件的关系；
+- `objdump`、`readelf`、`nm` 和 GDB；
+- AT&T 语法与 Intel 语法；
+- `-O0`、`-Og` 和 `-O2` 的基本差别。
+
+### A01：CPU 执行模型、寄存器宽度与 `mov`
+
+- `RIP`、通用寄存器、`RSP`、`RFLAGS` 和内存；
+- `RAX/EAX/AX/AL/AH` 的关系；
+- 8、16、32、64 位写入；
+- 写 `EAX` 时高 32 位清零；
+- 立即数、寄存器和内存操作数；
+- 零扩展与符号扩展。
+
+教程：[`docs/01-cpu-execution-model-and-register-width.md`](docs/01-cpu-execution-model-and-register-width.md)
+
+实验：[`labs/01-register-width/`](labs/01-register-width/)
+
+### A02：地址、解引用、数组、结构体与 `lea`
+
+- 地址与地址处的数据；
+- `disp(base,index,scale)`；
+- 一维数组、二维数组和指针数组；
+- 结构体成员、结构体数组和嵌套结构体；
+- 对齐、填充、`sizeof` 和 `offsetof`；
+- RIP-relative 寻址；
+- `lea` 的地址计算和整数运算用途。
+
+教程：[`docs/02-addressing-dereference-and-lea.md`](docs/02-addressing-dereference-and-lea.md)
+
+实验：[`labs/02-addressing/`](labs/02-addressing/)
+
+### A03：`RFLAGS`、比较、条件跳转与基本块
+
+- `CF`、`ZF`、`SF` 和 `OF`；
+- `cmp` 与 `test`；
+- 有符号比较与无符号比较；
+- `jcc`、`setcc` 和 `cmovcc`；
+- 基本块、控制流图和循环回边；
+- 分支预测的基本概念。
+
+教程：[`docs/03-rflags-comparison-and-control-flow.md`](docs/03-rflags-comparison-and-control-flow.md)
+
+实验：[`labs/03-flags-and-branches/`](labs/03-flags-and-branches/)
+
+### A04：整数算术、位运算、移位、乘法与除法
+
+- `add`、`sub`、`neg`、`inc` 和 `dec`；
+- `and`、`or`、`xor` 和 `not`；
+- `shl`、`shr` 和 `sar`；
+- `mul`、`imul`、`div` 和 `idiv`；
+- `RDX:RAX` 的隐式操作数；
+- 常数乘除法的编译器优化。
+
+### A05：循环、状态机与 `switch`
+
+- `while`、`do-while` 和 `for`；
+- 数组和指针遍历；
+- 循环回边；
+- `switch` 比较链；
+- 跳转表和间接跳转。
+
+### A06：栈、`push/pop` 与初始用户栈
+
+- 栈向低地址增长；
+- `RSP` 的变化；
+- `push` 和 `pop`；
+- `_start` 时的 `argc`、`argv`、`envp` 和 auxiliary vector；
+- 栈对齐。
+
+### A07：`call`、`ret` 与返回地址
+
+- 直接调用和间接调用；
+- 返回地址如何保存；
+- 函数指针；
+- 递归；
+- 返回地址损坏的基本后果。
+
+### A08：System V AMD64 ABI
+
+- 整数参数寄存器；
+- 返回值寄存器；
+- caller-saved 与 callee-saved；
+- 栈上传递的参数；
+- 16 字节栈对齐；
+- Red Zone；
+- 小结构体和大结构体的参数、返回规则。
+
+### A09：函数栈帧、局部变量与栈展开
+
+- 函数序言和尾声；
+- `RBP` 栈帧；
+- 局部变量和寄存器溢出；
+- 叶子函数；
+- frame pointer omission；
+- DWARF CFI 和调用栈展开的基础。
+
+### A10：编译器优化后的汇编
+
+- 内联；
+- 尾调用；
+- 公共子表达式；
+- 寄存器分配；
+- spill 和 reload；
+- `-O0`、`-Og` 和 `-O2` 对照；
+- 优化代码的调试限制。
+
+### A11：ELF、符号与重定位
+
+- `.text`、`.rodata`、`.data` 和 `.bss`；
+- section 与 segment；
+- 符号表；
+- 强符号、弱符号和未定义符号；
+- PC-relative 重定位；
+- 静态链接的基本过程。
+
+### A12：PIC、PIE、GOT 与 PLT
+
+- 位置无关代码；
+- RIP-relative 访问；
+- PIE 和 ASLR；
+- GOT 与 PLT；
+- 动态链接和延迟绑定。
+
+### A13：Linux x86-64 系统调用 ABI
+
+- `syscall` 指令；
+- 系统调用号和参数寄存器；
+- `RCX`、`R11` 和 `R10` 的特殊作用；
+- 原始返回值与 `errno`；
+- libc 包装函数与直接系统调用。
+
+### A14：Linux 5.10 系统调用入口与返回
+
+- `entry_SYSCALL_64`；
+- 用户栈与内核栈切换；
+- `pt_regs`；
+- `do_syscall_64`；
+- 返回用户态前的检查；
+- `sysretq` 与 `iretq`。
+
+### A15：异常、中断与特权级切换
+
+- Ring 0 与 Ring 3；
+- IDT、GDT 和 TSS；
+- trap、fault 和 interrupt；
+- CPU 自动压栈的内容；
+- 有错误码和无错误码异常；
+- IST 和特殊异常栈。
+
+### A16：缺页异常入口
+
+- `#PF`；
+- `CR2` 和错误码；
+- 异常入口如何构造寄存器现场；
+- 从汇编入口进入内存管理代码；
+- 异常处理完成后的返回。
+
+缺页处理的主体放在 [`../memory/`](../memory/) 中学习。
+
+### A17：上下文切换汇编
+
+- `switch_to`；
+- `__switch_to_asm`；
+- callee-saved 寄存器；
+- 内核栈切换；
+- 从旧任务返回到新任务的过程。
+
+调度主体放在 [`../scheduler/`](../scheduler/) 中学习。
+
+### A18：原子指令、内存屏障与内联汇编
+
+- `xchg`、`cmpxchg` 和 `xadd`；
+- `lock` 前缀；
+- `mfence`、`lfence` 和 `sfence`；
+- GCC 扩展内联汇编；
+- 输入、输出和 clobber 约束；
+- 内核原子操作和屏障接口的汇编基础。
+
+### A19：早期启动汇编阅读基础
+
+- 实模式、保护模式和长模式；
+- 控制寄存器；
+- 早期页表；
+- 远跳转和模式切换；
+- `head_64.S` 所需的汇编基础。
+
+完整启动过程放在 [`../boot-crash/`](../boot-crash/) 中学习。
+
+## 章节和实验的组织方式
 
 ```text
-问题背景 → 直观模型 → 指令语义 → C/汇编对照 → GDB 验证 → 内核联系
+assembly/README.md       本领域唯一的课程大纲
+assembly/docs/           具体章节教程
+assembly/labs/           可编译、可调试的实验
 ```
 
-## 课程索引
-
-0. [汇编课程总纲](docs/00-course-overview.md)
-1. [CPU 执行模型、寄存器宽度与 mov](docs/01-cpu-execution-model-and-register-width.md)
-2. [地址、解引用、数组、结构体与 lea](docs/02-addressing-dereference-and-lea.md)
-3. [RFLAGS、比较、条件跳转与基本块](docs/03-rflags-comparison-and-control-flow.md)
-
-后续依次补充：
+每一章尽量按照下面的顺序展开：
 
 ```text
-算术、移位、乘除法
-循环、状态机与 switch
-栈和初始用户栈
-call、ret 与函数 ABI
-ELF、重定位、PLT/GOT
-系统调用入口和返回
-异常、中断与 pt_regs
-上下文切换汇编
-内核启动
-原子操作、内存屏障和内联汇编
-```
-
-## 实验索引
-
-1. [寄存器宽度实验](labs/01-register-width/README.md)
-2. [复合取址与结构体布局实验](labs/02-addressing/README.md)
-3. [RFLAGS、比较与条件分支实验](labs/03-flags-and-branches/README.md)
-
-## 课程讲述约定
-
-为兼顾不同基础的学习者，后续课程统一按以下层次组织：
-
-```text
-主线
-先用直观语言和最小示例说明“这是什么、解决什么问题”。
-
-原理
-解释 CPU、ABI、编译器或操作系统为什么采用这种设计。
-
-进阶
-分析优化形式、边界条件、不同实现和常见误区。
-
-关联知识
-在不打断主线的前提下，连接 ELF、页表、调度、时钟、网络栈和内核源码。
-
-实验
-通过可编译代码、objdump 和 GDB 验证，不把结论停留在文字层面。
-```
-
-首次阅读时可以只完成“主线 + 实验”；有一定基础后再阅读原理和进阶部分。
-
-## 目录职责
-
-```text
-assembly/README.md        汇编维度导航和实验入口
-assembly/docs/            汇编课程总纲与逐课教程
-assembly/labs/            可编译、可调试的配套实验
+问题背景
+→ 基本原理
+→ 设计考虑
+→ 指令或 ABI 规则
+→ C 与汇编对照
+→ 实验验证
+→ 内核中的应用
 ```
 
 ## 默认环境
 
-- x86-64 Linux
-- GNU assembler（AT&T 语法）
-- GCC、binutils、GDB
-- System V AMD64 ABI
-- Linux kernel 5.10
-
-## 推荐工具
-
-Debian/Ubuntu：
-
-```bash
-sudo apt install build-essential binutils gdb
-```
-
-openEuler/RHEL：
-
-```bash
-sudo dnf install gcc binutils gdb make
+```text
+体系结构：x86-64
+操作系统：Linux
+内核源码：Linux kernel 5.10
+汇编器：GNU assembler
+主要语法：AT&T
+辅助语法：Intel
+ABI：System V AMD64 ABI
 ```
