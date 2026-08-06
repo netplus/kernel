@@ -139,12 +139,12 @@ OF = 0    -1 + 1 在有符号范围内
 ```text
 入口块
   testq %rax,%rax
-  jns .Lnonnegative
-      ├─ 不跳转 → .Lnegative
-      └─ 跳转   → .Lnonnegative
+  jns nonnegative
+      ├─ 不跳转 → negative
+      └─ 跳转   → nonnegative
 ```
 
-`RAX=-5` 时 `SF=1`，因此 `jns` 不跳转，执行 `.Lnegative`。
+`RAX=-5` 时 `SF=1`，因此 `jns` 不跳转，执行 `negative`。
 
 每个基本块满足：
 
@@ -156,7 +156,7 @@ OF = 0    -1 + 1 在有符号范围内
 
 ```asm
 cmpq %rcx, %rax
-jle .Lselect_second
+jle select_second
 ```
 
 比较的是：
@@ -166,7 +166,7 @@ RAX - RCX
 9 - 4
 ```
 
-有符号条件 `9 <= 4` 不成立，因此顺序执行 `.Lselect_first`，最终：
+有符号条件 `9 <= 4` 不成立，因此顺序执行 `select_first`，最终：
 
 ```text
 RDX = 9
