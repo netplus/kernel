@@ -3,17 +3,15 @@ set disassembly-flavor att
 set confirm off
 
 break _start
-break .Lafter_cmp_equal
-break .Lafter_test_zero
-break .Lafter_cmp_signed_unsigned
-break .Lafter_signed_overflow
-break .Lafter_unsigned_carry
-break .Lnegative
-break .Lnonnegative
-break .Lafter_sign_branch
-break .Lselect_first
-break .Lselect_second
-break .Lmax_done
+break after_cmp_equal
+break after_test_zero
+break after_cmp_signed_unsigned
+break after_signed_overflow
+break after_unsigned_carry
+break negative
+break after_sign_branch
+break select_first
+break max_done
 
 run
 
@@ -45,16 +43,18 @@ printf "expect CF=1, ZF=1, OF=0\n"
 info registers r14 eflags
 continue
 
-printf "\n=== branch/basic-block trace ===\n"
+printf "\n=== negative basic block selected ===\n"
+x/6i $pc
+info registers rax eflags
+continue
+
+printf "\n=== sign branches merge here ===\n"
 x/6i $pc
 continue
+
+printf "\n=== first max-selection block selected ===\n"
 x/6i $pc
-continue
-x/6i $pc
-continue
-x/6i $pc
-continue
-x/6i $pc
+info registers rax rcx eflags
 continue
 
 printf "\n=== max merge block: expect RDX=9 ===\n"
