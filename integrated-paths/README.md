@@ -224,18 +224,6 @@ fork
 
 关联：boot-crash、assembly、memory、scheduler、timekeeping。
 
-## 每个综合专题的内容结构
-
-```text
-01-background.md        问题背景和总体过程
-02-call-path.md         主要调用路径
-03-data-structures.md   关键数据结构
-04-context.md           执行上下文和 CPU 状态
-05-source-walk.md       Linux 5.10 源码分析
-06-lab.md               实验和观测方法
-07-debugging.md         故障定位和结果解释
-```
-
 ## 建议学习方法
 
 进入某个综合专题前，先完成相关的基础章节。例如学习上下文切换前，应先掌握：
