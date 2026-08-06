@@ -30,64 +30,64 @@ _start:
     # Case 1: cmp updates flags but does not modify RAX.
     movq $7, %rax
     cmpq $7, %rax
-.Lafter_cmp_equal:
+after_cmp_equal:
     sete result_eq(%rip)
 
     # Case 2: test reg,reg is the conventional zero test.
     xorq %rcx, %rcx
     testq %rcx, %rcx
-.Lafter_test_zero:
+after_test_zero:
     setz result_zero(%rip)
 
     # Case 3: the same CMP flags support signed and unsigned views.
     # Bit pattern -1 is less than 1 as signed, but above 1 as unsigned.
     movq $-1, %r8
     cmpq $1, %r8
-.Lafter_cmp_signed_unsigned:
+after_cmp_signed_unsigned:
     setl result_signed_less(%rip)
     seta result_unsigned_above(%rip)
 
     # Case 4: signed overflow without unsigned carry.
     movabsq $0x7fffffffffffffff, %r11
     addq $1, %r11
-.Lafter_signed_overflow:
+after_signed_overflow:
     seto result_overflow(%rip)
     setnc result_no_carry(%rip)
 
     # Case 5: unsigned carry and zero after wraparound.
     movq $-1, %r14
     addq $1, %r14
-.Lafter_unsigned_carry:
+after_unsigned_carry:
     setc result_carry(%rip)
     setz result_wrap_zero(%rip)
 
     # Case 6: conditional jump creates multiple basic blocks.
     movq $-5, %rax
     testq %rax, %rax
-    jns .Lnonnegative
+    jns nonnegative
 
-.Lnegative:
+negative:
     movb $1, branch_negative(%rip)
-    jmp .Lafter_sign_branch
+    jmp after_sign_branch
 
-.Lnonnegative:
+nonnegative:
     movb $0, branch_negative(%rip)
 
-.Lafter_sign_branch:
+after_sign_branch:
     # Case 7: signed maximum implemented as branch-and-merge.
     movq $9, %rax
     movq $4, %rcx
     cmpq %rcx, %rax
-    jle .Lselect_second
+    jle select_second
 
-.Lselect_first:
+select_first:
     movq %rax, %rdx
-    jmp .Lmax_done
+    jmp max_done
 
-.Lselect_second:
+select_second:
     movq %rcx, %rdx
 
-.Lmax_done:
+max_done:
     movq %rdx, max_value(%rip)
 
     # Build a deterministic checksum:
