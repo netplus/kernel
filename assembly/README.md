@@ -72,6 +72,10 @@ C 代码如何转换成机器指令？
 - `RDX:RAX` 的隐式操作数；
 - 常数乘除法的编译器优化。
 
+教程：[`docs/04-integer-arithmetic-shifts-multiply-divide.md`](docs/04-integer-arithmetic-shifts-multiply-divide.md)
+
+实验：[`labs/04-arithmetic-and-shifts/`](labs/04-arithmetic-and-shifts/)
+
 ### A05：循环、状态机与 `switch`
 
 - `while`、`do-while` 和 `for`；
