@@ -81,8 +81,14 @@ C 代码如何转换成机器指令？
 - `while`、`do-while` 和 `for`；
 - 数组和指针遍历；
 - 循环回边；
-- `switch` 比较链；
-- 跳转表和间接跳转。
+- 状态分发与状态转换；
+- `break` 与 `continue`；
+- 稀疏 `switch` 的比较结构；
+- 稠密 `switch` 的跳转表和间接跳转。
+
+教程：[`docs/05-loops-state-machines-and-switch.md`](docs/05-loops-state-machines-and-switch.md)
+
+实验：[`labs/05-loops-state-machines-switch/`](labs/05-loops-state-machines-switch/)
 
 ### A06：栈、`push/pop` 与初始用户栈
 
