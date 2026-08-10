@@ -180,7 +180,13 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 
 实验：[`labs/08-stack-alignment/`](labs/08-stack-alignment/)
 
-A08 尚未完成。下一部分继续学习 Red Zone。
+第五部分：128-byte Red Zone
+
+教程：[`docs/08-red-zone.md`](docs/08-red-zone.md)
+
+实验：[`labs/08-red-zone/`](labs/08-red-zone/)
+
+A08 尚未完成。下一部分继续学习小结构体和大结构体的参数、返回规则。
 
 ### A09：函数栈帧、局部变量与栈展开
 
