@@ -186,7 +186,13 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 
 实验：[`labs/08-red-zone/`](labs/08-red-zone/)
 
-A08 尚未完成。下一部分继续学习小结构体和大结构体的参数、返回规则。
+第六部分：聚合类型的 INTEGER 与 MEMORY 参数/返回规则
+
+教程：[`docs/08-aggregate-arguments-and-returns.md`](docs/08-aggregate-arguments-and-returns.md)
+
+实验：[`labs/08-aggregate-abi/`](labs/08-aggregate-abi/)
+
+A08 尚未完成。下一部分继续学习混合 INTEGER/SSE 聚合的参数、返回规则。
 
 ### A09：函数栈帧、局部变量与栈展开
 
