@@ -154,7 +154,8 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 - 栈上传递的参数；
 - 16 字节栈对齐；
 - Red Zone；
-- 小结构体和大结构体的参数、返回规则。
+- 小结构体和大结构体的参数、返回规则；
+- 混合 INTEGER/SSE 聚合的参数、返回规则。
 
 第一部分：INTEGER 参数寄存器与整数返回值
 
@@ -192,7 +193,13 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 
 实验：[`labs/08-aggregate-abi/`](labs/08-aggregate-abi/)
 
-A08 尚未完成。下一部分继续学习混合 INTEGER/SSE 聚合的参数、返回规则。
+第七部分：混合 INTEGER/SSE 聚合
+
+教程：[`docs/08-mixed-integer-sse-aggregate.md`](docs/08-mixed-integer-sse-aggregate.md)
+
+实验：[`labs/08-mixed-aggregate/`](labs/08-mixed-aggregate/)
+
+A08 已完成。下一章进入 A09：函数栈帧、局部变量与栈展开。
 
 ### A09：函数栈帧、局部变量与栈展开
 
