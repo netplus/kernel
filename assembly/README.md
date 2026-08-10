@@ -168,7 +168,13 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 
 实验：[`labs/08-register-preservation/`](labs/08-register-preservation/)
 
-A08 尚未完成。下一部分继续学习栈上传递的参数。
+第三部分：寄存器耗尽后的栈上传参
+
+教程：[`docs/08-stack-passed-arguments.md`](docs/08-stack-passed-arguments.md)
+
+实验：[`labs/08-stack-arguments/`](labs/08-stack-arguments/)
+
+A08 尚未完成。下一部分继续学习普通函数调用边界的 16 字节栈对齐。
 
 ### A09：函数栈帧、局部变量与栈展开
 
