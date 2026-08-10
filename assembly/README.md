@@ -156,6 +156,14 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 - Red Zone；
 - 小结构体和大结构体的参数、返回规则。
 
+第一部分：INTEGER 参数寄存器与整数返回值
+
+教程：[`docs/08-integer-arguments-and-return-values.md`](docs/08-integer-arguments-and-return-values.md)
+
+实验：[`labs/08-integer-arguments-and-return/`](labs/08-integer-arguments-and-return/)
+
+A08 尚未完成。下一部分继续学习 caller-saved 与 callee-saved 寄存器。
+
 ### A09：函数栈帧、局部变量与栈展开
 
 - 函数序言和尾声；
