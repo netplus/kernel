@@ -120,6 +120,14 @@ C 代码如何转换成机器指令？
 - 递归；
 - 返回地址损坏的基本后果。
 
+第一部分：direct `call`、near `ret` 与返回地址
+
+教程：[`docs/07-call-ret-and-return-address.md`](docs/07-call-ret-and-return-address.md)
+
+实验：[`labs/07-call-ret/`](labs/07-call-ret/)
+
+A07 尚未完成；后续继续学习间接调用、函数指针、递归和返回地址破坏。
+
 ### A08：System V AMD64 ABI
 
 - 整数参数寄存器；
