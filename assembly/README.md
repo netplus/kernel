@@ -138,7 +138,13 @@ C 代码如何转换成机器指令？
 
 实验：[`labs/07-recursion/`](labs/07-recursion/)
 
-A07 尚未完成；下一部分继续学习返回地址损坏的基本后果。
+第四部分：返回地址损坏的基本后果
+
+教程：[`docs/07-damaged-return-address.md`](docs/07-damaged-return-address.md)
+
+实验：[`labs/07-damaged-return-address/`](labs/07-damaged-return-address/)
+
+A07 已完成。下一章进入 A08：System V AMD64 ABI。
 
 ### A08：System V AMD64 ABI
 
