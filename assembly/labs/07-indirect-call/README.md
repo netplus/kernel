@@ -24,7 +24,7 @@
 indirect_call.s       纯汇编实验：寄存器和内存两种间接调用
 companion.c           C 函数指针对照代码
 Makefile              构建、运行、反汇编和 C 汇编输出
- gdb.cmd               分阶段观察目标地址、RSP 和返回地址
+gdb.cmd               分阶段观察目标地址、RSP 和返回地址
 expected-analysis.md  已验证结果和参考反汇编
 ```
 
