@@ -132,7 +132,13 @@ C 代码如何转换成机器指令？
 
 实验：[`labs/07-indirect-call/`](labs/07-indirect-call/)
 
-A07 尚未完成；后续继续学习递归形成的多层返回地址，以及返回地址损坏的基本后果。
+第三部分：递归调用与多层返回地址
+
+教程：[`docs/07-recursion-and-multiple-return-addresses.md`](docs/07-recursion-and-multiple-return-addresses.md)
+
+实验：[`labs/07-recursion/`](labs/07-recursion/)
+
+A07 尚未完成；下一部分继续学习返回地址损坏的基本后果。
 
 ### A08：System V AMD64 ABI
 
