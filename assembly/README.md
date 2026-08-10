@@ -98,6 +98,14 @@ C 代码如何转换成机器指令？
 - `_start` 时的 `argc`、`argv`、`envp` 和 auxiliary vector；
 - 栈对齐。
 
+已完成第一部分：
+
+教程：[`docs/06-stack-model-and-push-pop.md`](docs/06-stack-model-and-push-pop.md)
+
+实验：[`labs/06-stack-push-pop/`](labs/06-stack-push-pop/)
+
+后续继续完成 `_start` 初始用户栈和 ABI 对齐。
+
 ### A07：`call`、`ret` 与返回地址
 
 - 直接调用和间接调用；
