@@ -174,7 +174,13 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 
 实验：[`labs/08-stack-arguments/`](labs/08-stack-arguments/)
 
-A08 尚未完成。下一部分继续学习普通函数调用边界的 16 字节栈对齐。
+第四部分：普通函数调用边界的 16 字节栈对齐
+
+教程：[`docs/08-stack-alignment.md`](docs/08-stack-alignment.md)
+
+实验：[`labs/08-stack-alignment/`](labs/08-stack-alignment/)
+
+A08 尚未完成。下一部分继续学习 Red Zone。
 
 ### A09：函数栈帧、局部变量与栈展开
 
