@@ -58,16 +58,46 @@
 - `crashkernel` 等保留区域；
 - 将可用内存交给伙伴系统。
 
-### M04：Page、Zone 和 Node
+### M04：NUMA、Page、Zone 与 Node
 
-- `struct page`；
-- PFN；
-- `ZONE_DMA`、`ZONE_DMA32` 和 `ZONE_NORMAL`；
-- `pglist_data`；
-- node 和 zone 的关系；
-- zonelist；
-- watermark；
-- NUMA 只讲解理解这些结构所需的基本概念。
+本单元研究 Linux 5.10 在 x86-64 启动阶段，如何把硬件/固件提供的 CPU 与物理内存拓扑转换成页分配器能够使用的软件结构。
+
+核心主线：
+
+```text
+Firmware / ACPI / physical memory map
+→ memblock
+→ NUMA discovery
+→ CPU ↔ node
+→ node memory ranges
+→ pg_data_t
+→ zone
+→ struct page
+→ buddy allocator preparation
+```
+
+本单元深入**启动期 NUMA topology**，但不展开 automatic NUMA balancing、NUMA policy、运行期 page migration 等高级 NUMA 主题。
+
+子教程：
+
+- [`M04-00：Page、Zone、Node 总览`](docs/04-00-page-zone-node-overview.md)
+- [`M04-01：SMP、NUMA 与物理拓扑`](docs/04-01-smp-numa-memory-topology.md)
+- [`M04-02：x86 NUMA 拓扑发现`](docs/04-02-x86-numa-discovery.md)
+- [`M04-03：CPU 到 NUMA Node 的映射`](docs/04-03-cpu-node-mapping.md)
+- [`M04-04：Node Memory Range 与 pg_data_t`](docs/04-04-node-memory-and-pgdat.md)
+- [`M04-05：Zone 边界计算与初始化`](docs/04-05-zone-sizing-and-initialization.md)
+- [`M04-06：struct page 初始化`](docs/04-06-struct-page-initialization.md)
+- [`M04-07：从 Memblock 交接到 Buddy`](docs/04-07-memblock-to-buddy-handoff.md)
+
+完成本单元后，应能够解释：
+
+- `cpu_to_node(cpu)` 的映射信息来自哪里、何时建立；
+- 物理内存区间如何获得 NUMA node ID；
+- `NODE_DATA(nid)` 为什么能够找到对应的 `pg_data_t`；
+- 一个 node 的内存为什么还需要继续划分为不同 zone；
+- `spanned_pages`、`present_pages` 与 `managed_pages` 的区别；
+- `struct page` 元数据在普通页分配器尚不可用时如何建立；
+- memblock 管理的空闲物理内存最终如何进入 buddy allocator。
 
 ### M05：伙伴系统
 
