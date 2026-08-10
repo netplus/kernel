@@ -96,15 +96,21 @@ C 代码如何转换成机器指令？
 - `RSP` 的变化；
 - `push` 和 `pop`；
 - `_start` 时的 `argc`、`argv`、`envp` 和 auxiliary vector；
-- 栈对齐。
+- 初始用户栈的 16 字节对齐。
 
-已完成第一部分：
+第一部分：栈模型与 `push/pop`
 
 教程：[`docs/06-stack-model-and-push-pop.md`](docs/06-stack-model-and-push-pop.md)
 
 实验：[`labs/06-stack-push-pop/`](labs/06-stack-push-pop/)
 
-后续继续完成 `_start` 初始用户栈和 ABI 对齐。
+第二部分：`_start` 初始用户栈
+
+教程：[`docs/06-initial-user-stack.md`](docs/06-initial-user-stack.md)
+
+实验：[`labs/06-initial-user-stack/`](labs/06-initial-user-stack/)
+
+普通函数调用边界的 System V AMD64 ABI 栈对齐规则在 A08 中继续展开。
 
 ### A07：`call`、`ret` 与返回地址
 
