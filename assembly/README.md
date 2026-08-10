@@ -162,7 +162,13 @@ A07 已完成。下一章进入 A08：System V AMD64 ABI。
 
 实验：[`labs/08-integer-arguments-and-return/`](labs/08-integer-arguments-and-return/)
 
-A08 尚未完成。下一部分继续学习 caller-saved 与 callee-saved 寄存器。
+第二部分：caller-saved 与 callee-saved 寄存器
+
+教程：[`docs/08-caller-saved-and-callee-saved.md`](docs/08-caller-saved-and-callee-saved.md)
+
+实验：[`labs/08-register-preservation/`](labs/08-register-preservation/)
+
+A08 尚未完成。下一部分继续学习栈上传递的参数。
 
 ### A09：函数栈帧、局部变量与栈展开
 
