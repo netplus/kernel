@@ -126,7 +126,13 @@ C 代码如何转换成机器指令？
 
 实验：[`labs/07-call-ret/`](labs/07-call-ret/)
 
-A07 尚未完成；后续继续学习间接调用、函数指针、递归和返回地址破坏。
+第二部分：indirect `call` 与函数指针
+
+教程：[`docs/07-indirect-call-and-function-pointers.md`](docs/07-indirect-call-and-function-pointers.md)
+
+实验：[`labs/07-indirect-call/`](labs/07-indirect-call/)
+
+A07 尚未完成；后续继续学习递归形成的多层返回地址，以及返回地址损坏的基本后果。
 
 ### A08：System V AMD64 ABI
 
