@@ -52,6 +52,10 @@
 - KASLR；
 - 虚拟地址与物理地址转换的适用范围。
 
+深化专题：[`x86-64 Direct Map：为什么通常不再需要 ZONE_HIGHMEM`](docs/00-x86-64-direct-map-and-why-no-highmem.md)
+
+这篇专题沿“virtual-address width → kernel VA budget → direct-map window → physical-address capability → zone 结果”的因果链，对比经典 32-bit x86 与 Linux 5.10 x86-64，解释为什么 x86-64 能够为 ordinary RAM 提供足够大的 permanent direct mapping，从而通常不再需要经典 `ZONE_HIGHMEM`。
+
 ### M03：启动期 Memblock
 
 - 固件或引导程序提供的内存地图；
