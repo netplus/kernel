@@ -210,6 +210,14 @@ A08 已完成。下一章进入 A09：函数栈帧、局部变量与栈展开。
 - frame pointer omission；
 - DWARF CFI 和调用栈展开的基础。
 
+第一部分：`RBP` 栈帧基本模型
+
+教程：[`docs/09-rbp-frame-basics.md`](docs/09-rbp-frame-basics.md)
+
+实验：[`labs/09-rbp-frame/`](labs/09-rbp-frame/)
+
+A09 尚未完成。下一部分继续局部变量、寄存器 spill/reload 与编译器生成的实际栈槽。
+
 ### A10：编译器优化后的汇编
 
 - 内联；
