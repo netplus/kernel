@@ -264,7 +264,13 @@ A09 已完成。五个部分已经覆盖经典 `%rbp` frame、局部变量与 sp
 
 实验：[`labs/10-tail-calls/`](labs/10-tail-calls/)
 
-A10 尚未完成。下一最小单元是公共子表达式与重复计算消除：通过 `-O0/-Og/-O2` 对比观察源码中的重复表达式如何被合并，并核对寄存器中的中间值与最终反汇编。
+第三部分：公共子表达式与重复计算消除
+
+教程：[`docs/10-common-subexpressions-and-redundant-computation.md`](docs/10-common-subexpressions-and-redundant-computation.md)
+
+实验：[`labs/10-common-subexpressions/`](labs/10-common-subexpressions/)
+
+A10 尚未完成。下一最小单元是寄存器分配与 live range：分析同一物理寄存器如何在不同时间承载不同机器级 value，并通过增加同时活跃值的数量观察寄存器压力何时引出 spill/reload。
 
 ### A11：ELF、符号与重定位
 
