@@ -222,7 +222,13 @@ A08 已完成。下一章进入 A09：函数栈帧、局部变量与栈展开。
 
 实验：[`labs/09-locals-and-spills/`](labs/09-locals-and-spills/)
 
-A09 尚未完成。下一部分继续 leaf function 与 frame pointer omission。
+第三部分：leaf function 与 frame pointer omission
+
+教程：[`docs/09-leaf-functions-and-frame-pointer-omission.md`](docs/09-leaf-functions-and-frame-pointer-omission.md)
+
+实验：[`labs/09-leaf-frame-omission/`](labs/09-leaf-frame-omission/)
+
+A09 尚未完成。下一部分继续 DWARF CFI、CFA 与调用栈展开基础。
 
 ### A10：编译器优化后的汇编
 
