@@ -240,7 +240,7 @@ A08 已完成。下一章进入 A09：函数栈帧、局部变量与栈展开。
 
 实验：[`labs/09-unwind-boundaries/`](labs/09-unwind-boundaries/)
 
-A09 尚未完成。下一最小单元是整章一致性复核；只有栈帧、spill/reload、frame pointer omission、CFI 与实际 unwind 的术语、链接和实验结论全部复核通过后，才进入 A10。
+A09 已完成。五个部分已经覆盖经典 `%rbp` frame、局部变量与 spill/reload、frame pointer omission、DWARF CFI/CFA，以及 CFI 正确/缺失/错误时的实际展开边界。下一章进入 A10：编译器优化后的汇编。
 
 ### A10：编译器优化后的汇编
 
@@ -251,6 +251,14 @@ A09 尚未完成。下一最小单元是整章一致性复核；只有栈帧、s
 - spill 和 reload；
 - `-O0`、`-Og` 和 `-O2` 对照；
 - 优化代码的调试限制。
+
+第一部分：内联与函数边界消失
+
+教程：[`docs/10-inlining-and-disappearing-call-boundaries.md`](docs/10-inlining-and-disappearing-call-boundaries.md)
+
+实验：[`labs/10-inlining/`](labs/10-inlining/)
+
+A10 尚未完成。下一最小单元是尾调用与 sibling-call 优化：比较普通 `call + ret` 与优化后的直接跳转，核对返回地址、`RSP` 和调用栈语义。
 
 ### A11：ELF、符号与重定位
 
