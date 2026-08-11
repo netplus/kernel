@@ -276,7 +276,13 @@ A09 已完成。五个部分已经覆盖经典 `%rbp` frame、局部变量与 sp
 
 实验：[`labs/10-register-allocation-live-ranges/`](labs/10-register-allocation-live-ranges/)
 
-A10 尚未完成。下一最小单元是优化代码的调试限制：对比 `-O0`、`-Og` 和 `-O2` 下源码行、变量 location、DWARF 信息与真实机器指令边界如何偏离，并明确调试器可以恢复什么、不能可靠恢复什么。
+第五部分：优化代码的调试限制
+
+教程：[`docs/10-optimized-code-debugging-limits.md`](docs/10-optimized-code-debugging-limits.md)
+
+实验：[`labs/10-optimized-debugging/`](labs/10-optimized-debugging/)
+
+A10 已完成。五个部分已经覆盖内联、尾调用、公共子表达式与重复计算消除、寄存器分配与 spill/reload，以及优化后源码行、DWARF variable location 与真实机器指令之间的调试边界。下一章进入 A11：ELF、符号与重定位。
 
 ### A11：ELF、符号与重定位
 
