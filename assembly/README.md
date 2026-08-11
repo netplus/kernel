@@ -234,7 +234,13 @@ A08 已完成。下一章进入 A09：函数栈帧、局部变量与栈展开。
 
 实验：[`labs/09-dwarf-cfi/`](labs/09-dwarf-cfi/)
 
-A09 尚未完成。下一部分继续最小多层调用链的实际 backtrace/unwind，以及 CFI 缺失或错误时的边界。
+第五部分：多层调用链与 CFI 展开边界
+
+教程：[`docs/09-unwind-boundaries.md`](docs/09-unwind-boundaries.md)
+
+实验：[`labs/09-unwind-boundaries/`](labs/09-unwind-boundaries/)
+
+A09 尚未完成。下一最小单元是整章一致性复核；只有栈帧、spill/reload、frame pointer omission、CFI 与实际 unwind 的术语、链接和实验结论全部复核通过后，才进入 A10。
 
 ### A10：编译器优化后的汇编
 
