@@ -258,7 +258,13 @@ A09 已完成。五个部分已经覆盖经典 `%rbp` frame、局部变量与 sp
 
 实验：[`labs/10-inlining/`](labs/10-inlining/)
 
-A10 尚未完成。下一最小单元是尾调用与 sibling-call 优化：比较普通 `call + ret` 与优化后的直接跳转，核对返回地址、`RSP` 和调用栈语义。
+第二部分：尾调用与 sibling-call 优化
+
+教程：[`docs/10-tail-calls-and-sibling-call-optimization.md`](docs/10-tail-calls-and-sibling-call-optimization.md)
+
+实验：[`labs/10-tail-calls/`](labs/10-tail-calls/)
+
+A10 尚未完成。下一最小单元是公共子表达式与重复计算消除：通过 `-O0/-Og/-O2` 对比观察源码中的重复表达式如何被合并，并核对寄存器中的中间值与最终反汇编。
 
 ### A11：ELF、符号与重定位
 
