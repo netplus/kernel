@@ -317,7 +317,13 @@ A10 已完成。五个部分已经覆盖内联、尾调用、公共子表达式�
 
 实验：[`labs/11-pc-relative-relocations/`](labs/11-pc-relative-relocations/)
 
-A11 前四部分已完成。当前已经把 section、symbol table、symbol resolution 与 relocation 串成一条完整主线。下一最小单元是静态链接的基本过程：观察多个输入 section 如何形成 output section，符号值如何随最终布局确定，以及 relocation 如何在最终链接中被消费。
+第五部分：静态链接的基本过程
+
+教程：[`docs/11-static-linking-process.md`](docs/11-static-linking-process.md)
+
+实验：[`labs/11-static-linking/`](labs/11-static-linking/)
+
+A11 已完成。五个部分已经把 section/segment、symbol table、symbol resolution、PC-relative relocation 与最终静态链接串成完整主线，并通过 `readelf`、`objdump`、`nm` 和 linker map 实际验证 input section 到 output section、最终 symbol value 和 relocation 消费过程。下一章进入 A12：PIC、PIE、GOT 与 PLT。
 
 ### A12：PIC、PIE、GOT 与 PLT
 
