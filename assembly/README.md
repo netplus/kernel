@@ -305,7 +305,19 @@ A10 已完成。五个部分已经覆盖内联、尾调用、公共子表达式�
 
 实验：[`labs/11-elf-symbol-table/`](labs/11-elf-symbol-table/)
 
-A11 前两部分已完成。下一最小单元是强符号、弱符号和未定义符号的链接选择规则：通过多个 `.o` 实际验证 strong/weak 组合、重复强定义错误，以及未定义引用如何由链接输入提供定义。
+第三部分：强符号、弱符号与未定义符号的链接选择
+
+教程：[`docs/11-strong-weak-and-undefined-symbols.md`](docs/11-strong-weak-and-undefined-symbols.md)
+
+实验：[`labs/11-symbol-binding/`](labs/11-symbol-binding/)
+
+第四部分：x86-64 PC-relative relocation
+
+教程：[`docs/11-pc-relative-relocations.md`](docs/11-pc-relative-relocations.md)
+
+实验：[`labs/11-pc-relative-relocations/`](labs/11-pc-relative-relocations/)
+
+A11 前四部分已完成。当前已经把 section、symbol table、symbol resolution 与 relocation 串成一条完整主线。下一最小单元是静态链接的基本过程：观察多个输入 section 如何形成 output section，符号值如何随最终布局确定，以及 relocation 如何在最终链接中被消费。
 
 ### A12：PIC、PIE、GOT 与 PLT
 
