@@ -299,7 +299,13 @@ A10 已完成。五个部分已经覆盖内联、尾调用、公共子表达式�
 
 实验：[`labs/11-elf-sections/`](labs/11-elf-sections/)
 
-A11 第一部分已完成。下一最小单元是 ELF 符号表：从 `Elf64_Sym` 的 name/value/size/info/shndx 建立符号到 section 的关系，并通过 `readelf -s`、`nm` 对 local/global、defined/undefined 做实际验证。
+第二部分：ELF 符号表与 section 绑定
+
+教程：[`docs/11-elf-symbol-table.md`](docs/11-elf-symbol-table.md)
+
+实验：[`labs/11-elf-symbol-table/`](labs/11-elf-symbol-table/)
+
+A11 前两部分已完成。下一最小单元是强符号、弱符号和未定义符号的链接选择规则：通过多个 `.o` 实际验证 strong/weak 组合、重复强定义错误，以及未定义引用如何由链接输入提供定义。
 
 ### A12：PIC、PIE、GOT 与 PLT
 
