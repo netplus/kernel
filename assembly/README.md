@@ -228,7 +228,13 @@ A08 已完成。下一章进入 A09：函数栈帧、局部变量与栈展开。
 
 实验：[`labs/09-leaf-frame-omission/`](labs/09-leaf-frame-omission/)
 
-A09 尚未完成。下一部分继续 DWARF CFI、CFA 与调用栈展开基础。
+第四部分：DWARF CFI、CFA 与基本栈展开
+
+教程：[`docs/09-dwarf-cfi-and-cfa.md`](docs/09-dwarf-cfi-and-cfa.md)
+
+实验：[`labs/09-dwarf-cfi/`](labs/09-dwarf-cfi/)
+
+A09 尚未完成。下一部分继续最小多层调用链的实际 backtrace/unwind，以及 CFI 缺失或错误时的边界。
 
 ### A10：编译器优化后的汇编
 
