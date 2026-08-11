@@ -270,7 +270,13 @@ A09 已完成。五个部分已经覆盖经典 `%rbp` frame、局部变量与 sp
 
 实验：[`labs/10-common-subexpressions/`](labs/10-common-subexpressions/)
 
-A10 尚未完成。下一最小单元是寄存器分配与 live range：分析同一物理寄存器如何在不同时间承载不同机器级 value，并通过增加同时活跃值的数量观察寄存器压力何时引出 spill/reload。
+第四部分：寄存器分配与 live range
+
+教程：[`docs/10-register-allocation-and-live-ranges.md`](docs/10-register-allocation-and-live-ranges.md)
+
+实验：[`labs/10-register-allocation-live-ranges/`](labs/10-register-allocation-live-ranges/)
+
+A10 尚未完成。下一最小单元是优化代码的调试限制：对比 `-O0`、`-Og` 和 `-O2` 下源码行、变量 location、DWARF 信息与真实机器指令边界如何偏离，并明确调试器可以恢复什么、不能可靠恢复什么。
 
 ### A11：ELF、符号与重定位
 
