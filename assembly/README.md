@@ -339,7 +339,13 @@ A11 已完成。五个部分已经把 section/segment、symbol table、symbol re
 
 实验：[`labs/12-pic-pie-rip-relative/`](labs/12-pic-pie-rip-relative/)
 
-A12 第一部分已完成。该部分已经区分绝对地址引用与同一映像内部的 RIP-relative 关系，并通过 non-PIE/PIE 的 ELF 类型、relocation、反汇编和当前环境 ASLR 观测完成验证。下一最小单元进入 GOT：解释动态链接场景下外部或可抢占数据符号为什么需要间接地址槽。
+第二部分：GOT、GOTPCREL 与动态数据符号解析
+
+教程：[`docs/12-got-and-dynamic-data-relocation.md`](docs/12-got-and-dynamic-data-relocation.md)
+
+实验：[`labs/12-got-data-access/`](labs/12-got-data-access/)
+
+A12 第一、第二部分已完成。当前已经建立“同一映像内部的 RIP-relative 关系”以及“代码通过 GOT slot 间接绑定动态数据符号”的两层模型，并通过 `readelf`、`objdump` 和实际运行验证 GOTPCREL 家族 relocation、`.got` 与 `R_X86_64_GLOB_DAT`。下一最小单元进入 PLT：解释外部函数调用中的 `PLT32`、`.plt`、`.got.plt` 与 `JUMP_SLOT` 如何协作，并区分 eager binding 与 lazy binding。
 
 ### A13：Linux x86-64 系统调用 ABI
 
