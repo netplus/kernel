@@ -333,6 +333,14 @@ A11 已完成。五个部分已经把 section/segment、symbol table、symbol re
 - GOT 与 PLT；
 - 动态链接和延迟绑定。
 
+第一部分：位置无关代码、PIE 与 RIP-relative 寻址
+
+教程：[`docs/12-pic-pie-and-rip-relative.md`](docs/12-pic-pie-and-rip-relative.md)
+
+实验：[`labs/12-pic-pie-rip-relative/`](labs/12-pic-pie-rip-relative/)
+
+A12 第一部分已完成。该部分已经区分绝对地址引用与同一映像内部的 RIP-relative 关系，并通过 non-PIE/PIE 的 ELF 类型、relocation、反汇编和当前环境 ASLR 观测完成验证。下一最小单元进入 GOT：解释动态链接场景下外部或可抢占数据符号为什么需要间接地址槽。
+
 ### A13：Linux x86-64 系统调用 ABI
 
 - `syscall` 指令；
