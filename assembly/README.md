@@ -293,6 +293,14 @@ A10 已完成。五个部分已经覆盖内联、尾调用、公共子表达式�
 - PC-relative 重定位；
 - 静态链接的基本过程。
 
+第一部分：ELF section 基本模型与 section/segment 区分
+
+教程：[`docs/11-elf-sections-and-segments.md`](docs/11-elf-sections-and-segments.md)
+
+实验：[`labs/11-elf-sections/`](labs/11-elf-sections/)
+
+A11 第一部分已完成。下一最小单元是 ELF 符号表：从 `Elf64_Sym` 的 name/value/size/info/shndx 建立符号到 section 的关系，并通过 `readelf -s`、`nm` 对 local/global、defined/undefined 做实际验证。
+
 ### A12：PIC、PIE、GOT 与 PLT
 
 - 位置无关代码；
