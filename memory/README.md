@@ -26,6 +26,10 @@
 - 页表、物理页分配器、对象分配器、VMA 和 page cache 的职责；
 - 启动期内存管理与运行期内存管理的区别。
 
+基础专题：[`地址空间、LOWMEM/HIGHMEM 与 Memory Zone：统一概念模型`](docs/00-address-space-lowmem-highmem-and-zones.md)
+
+这篇专题先使用经典 32-bit x86 建立“virtual address → kernel direct mapping → LOWMEM/HIGHMEM → physical page → zone”的概念层次，再回到 Linux 5.10 x86-64，重点区分 mapping、allocation、ownership 和 zone constraint。
+
 ### M01：x86-64 多级页表
 
 - PGD、P4D、PUD、PMD 和 PTE；
@@ -68,6 +72,8 @@
 - zonelist；
 - watermark；
 - NUMA 只讲解理解这些结构所需的基本概念。
+
+前置概念：理解 zone 之前，先完成 [`地址空间、LOWMEM/HIGHMEM 与 Memory Zone：统一概念模型`](docs/00-address-space-lowmem-highmem-and-zones.md)，特别注意 `LOWMEM/HIGHMEM` 是映射属性，而 `ZONE_*` 是 page allocator 对 physical pages 的分类。
 
 ### M05：伙伴系统
 
