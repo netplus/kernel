@@ -380,6 +380,24 @@ A13 已完成。本章已经区分 System V AMD64 普通函数 ABI、x86-64 `sys
 - 返回用户态前的检查；
 - `sysretq` 与 `iretq`。
 
+第一部分：`entry_SYSCALL_64`、内核栈切换与 `pt_regs`
+
+教程：[`docs/14-entry-syscall-64-stack-and-pt-regs.md`](docs/14-entry-syscall-64-stack-and-pt-regs.md)
+
+实验：[`labs/14-entry-syscall-pt-regs/`](labs/14-entry-syscall-pt-regs/)
+
+Linux 5.10 源码事实核验：[`source-paths/14-entry-syscall-64-stack-switch-linux-5.10.md`](source-paths/14-entry-syscall-64-stack-switch-linux-5.10.md)
+
+第二部分：`do_syscall_64()`、系统调用表与返回值写回
+
+教程：[`docs/14-do-syscall-64-dispatch-and-return-value.md`](docs/14-do-syscall-64-dispatch-and-return-value.md)
+
+实验：[`labs/14-do-syscall-dispatch/`](labs/14-do-syscall-dispatch/)
+
+Linux 5.10 源码事实核验：[`source-paths/14-do-syscall-64-dispatch-linux-5.10.md`](source-paths/14-do-syscall-64-dispatch-linux-5.10.md)
+
+A14 前两部分已完成内容编写和源码事实核验。两组内核入口实验均已形成可执行步骤，但由于当前维护环境没有匹配的 Linux 5.10 guest、`vmlinux` 与 kernel-GDB 会话，内核断点结果仍明确标记为待真实环境执行。下一部分继续分析 `syscall_exit_to_user_mode()` 的退出工作以及汇编返回侧如何在 `SYSRETQ` 快路径和 `IRETQ` 回退路径之间选择。
+
 ### A15：异常、中断与特权级切换
 
 - Ring 0 与 Ring 3；
