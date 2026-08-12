@@ -396,7 +396,15 @@ Linux 5.10 源码事实核验：[`source-paths/14-entry-syscall-64-stack-switch-
 
 Linux 5.10 源码事实核验：[`source-paths/14-do-syscall-64-dispatch-linux-5.10.md`](source-paths/14-do-syscall-64-dispatch-linux-5.10.md)
 
-A14 前两部分已完成内容编写和源码事实核验。两组内核入口实验均已形成可执行步骤，但由于当前维护环境没有匹配的 Linux 5.10 guest、`vmlinux` 与 kernel-GDB 会话，内核断点结果仍明确标记为待真实环境执行。下一部分继续分析 `syscall_exit_to_user_mode()` 的退出工作以及汇编返回侧如何在 `SYSRETQ` 快路径和 `IRETQ` 回退路径之间选择。
+第三部分：`syscall_exit_to_user_mode()`、SYSRET 快路径与 IRET 回退
+
+教程：[`docs/14-syscall-exit-sysret-and-iret.md`](docs/14-syscall-exit-sysret-and-iret.md)
+
+实验：[`labs/14-syscall-exit-sysret-iret/`](labs/14-syscall-exit-sysret-iret/)
+
+Linux 5.10 源码事实核验：[`source-paths/14-syscall-exit-sysret-iret-linux-5.10.md`](source-paths/14-syscall-exit-sysret-iret-linux-5.10.md)
+
+A14 已完成。三部分已经把 `entry_SYSCALL_64` 入口现场、用户栈到内核栈切换、`pt_regs` 构造、`do_syscall_64()` 分派与 `regs->ax` 写回、exit-to-user work，以及最终基于 `pt_regs` 的 SYSRET eligibility 与 IRET 回退串成完整系统调用进入/返回主线。三组 kernel-GDB 实验都已形成可执行步骤；由于当前维护环境缺少匹配的 Linux 5.10 guest、`vmlinux` 与 kernel-GDB 会话，动态断点结果继续明确标记为待真实环境执行，不作为已实测结论。下一章进入 A15：异常、中断与特权级切换。
 
 ### A15：异常、中断与特权级切换
 
