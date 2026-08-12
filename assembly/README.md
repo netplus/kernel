@@ -345,7 +345,13 @@ A11 已完成。五个部分已经把 section/segment、symbol table、symbol re
 
 实验：[`labs/12-got-data-access/`](labs/12-got-data-access/)
 
-A12 第一、第二部分已完成。当前已经建立“同一映像内部的 RIP-relative 关系”以及“代码通过 GOT slot 间接绑定动态数据符号”的两层模型，并通过 `readelf`、`objdump` 和实际运行验证 GOTPCREL 家族 relocation、`.got` 与 `R_X86_64_GLOB_DAT`。下一最小单元进入 PLT：解释外部函数调用中的 `PLT32`、`.plt`、`.got.plt` 与 `JUMP_SLOT` 如何协作，并区分 eager binding 与 lazy binding。
+第三部分：PLT、`JUMP_SLOT` 与动态函数调用
+
+教程：[`docs/12-plt-jump-slot-and-binding.md`](docs/12-plt-jump-slot-and-binding.md)
+
+实验：[`labs/12-plt-dynamic-calls/`](labs/12-plt-dynamic-calls/)
+
+A12 已完成。三个部分已经覆盖位置无关代码与 RIP-relative 寻址、PIE/ASLR、外部数据符号的 GOT/GOTPCREL 动态绑定，以及外部函数调用从 `R_X86_64_PLT32` 经 `.plt/.got.plt` 到 `R_X86_64_JUMP_SLOT` 的完整路径；实验同时对照了默认 lazy binding 与 `-z now` eager binding。下一章进入 A13：Linux x86-64 系统调用 ABI。
 
 ### A13：Linux x86-64 系统调用 ABI
 
