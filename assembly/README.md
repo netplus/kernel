@@ -415,6 +415,18 @@ A14 已完成。三部分已经把 `entry_SYSCALL_64` 入口现场、用户栈�
 - 有错误码和无错误码异常；
 - IST 和特殊异常栈。
 
+第一部分：IDT 普通异常入口、error code 与 `pt_regs`
+
+教程：[`docs/15-idt-exception-entry-and-pt-regs.md`](docs/15-idt-exception-entry-and-pt-regs.md)
+
+实验：[`labs/15-de-gp-exception-entry/`](labs/15-de-gp-exception-entry/)
+
+Linux 5.10 基础入口源码事实核验：[`source-paths/15-exception-interrupt-entry-basics-linux-5.10.md`](source-paths/15-exception-interrupt-entry-basics-linux-5.10.md)
+
+Linux 5.10 `#DE/#GP` 专项源码事实核验：[`source-paths/15-de-gp-error-code-pt-regs-linux-5.10.md`](source-paths/15-de-gp-error-code-pt-regs-linux-5.10.md)
+
+A15 第一部分已完成正文、两轮 Linux 5.10 源码事实核验、可构建的 `#DE/#GP` 用户态触发实验、kernel-GDB 观察步骤和 expected analysis。该部分已经建立 `IDT gate -> CPU hardware frame -> error-code normalization -> error_entry -> pt_regs -> C handler` 的普通异常入口模型，并明确 `#DE` 的 synthetic `-1` 与 `#GP` hardware error code 在 `orig_ax` 槽中的不同时间关系。当前环境缺少匹配的 Linux 5.10 guest、`vmlinux` 与 kernel-GDB 会话，因此内核动态断点结果继续标记为待真实环境执行。A15 尚未完成，下一部分继续学习 TSS、IST 与特殊异常栈。
+
 ### A16：缺页异常入口
 
 - `#PF`；
