@@ -361,6 +361,16 @@ A12 已完成。三个部分已经覆盖位置无关代码与 RIP-relative 寻�
 - 原始返回值与 `errno`；
 - libc 包装函数与直接系统调用。
 
+第一部分：原始 `syscall`、寄存器约定与返回值
+
+教程：[`docs/13-linux-x86-64-raw-syscall-abi.md`](docs/13-linux-x86-64-raw-syscall-abi.md)
+
+实验：[`labs/13-raw-syscall-abi/`](labs/13-raw-syscall-abi/)
+
+Linux 5.10 源码事实核验：[`source-paths/13-syscall-abi-linux-5.10.md`](source-paths/13-syscall-abi-linux-5.10.md)
+
+A13 已完成。本章已经区分 System V AMD64 普通函数 ABI、x86-64 `syscall` 指令的架构语义、Linux x86-64 syscall ABI 和 libc 用户态包装层；实验实际验证了 `%rax` 系统调用号、`%rdi/%rsi/%rdx/%r10/%r8/%r9` 参数约定、`%rcx/%r11` 的特殊角色、六参数 wrapper 的 `%rcx -> %r10` 适配，以及 raw negative errno 与 libc `-1 + errno` 的接口边界。Linux 5.10 的入口寄存器约定和 syscall number 来源已单独完成源码事实核验。下一章进入 A14：Linux 5.10 系统调用入口与返回。
+
 ### A14：Linux 5.10 系统调用入口与返回
 
 - `entry_SYSCALL_64`；
