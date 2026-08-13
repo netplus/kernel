@@ -433,9 +433,19 @@ Linux 5.10 `#DE/#GP` 专项源码事实核验：[`source-paths/15-de-gp-error-co
 
 Linux 5.10 源码事实核验：[`source-paths/15-tss-ist-special-exceptions-linux-5.10.md`](source-paths/15-tss-ist-special-exceptions-linux-5.10.md)
 
-A15 第一、第二部分已完成。第一部分建立 `IDT gate -> CPU hardware frame -> error-code normalization -> error_entry -> pt_regs -> C handler` 的普通异常入口模型；第二部分建立 `per-CPU exception stack -> TSS.ist[] -> TSS descriptor/TR -> IDT gate.IST -> CPU stack switch -> special entry` 模型，并通过 `#DE/#DB` 对照明确 privilege-level stack switch 与 IST stack switch 不是同一机制。两部分均已完成 Linux 5.10 源码事实核验、正文、实验设计和 expected analysis。需要 kernel-GDB 的动态地址与入口 `%rsp` 结果因当前环境缺少匹配 Linux 5.10 guest、`vmlinux` 与调试会话而继续标记为待实测。
+第三部分：普通外部中断入口、hardirq context 与 IRQ stack
 
-A15 尚未完成：章节大纲还包含 trap/fault/interrupt 的语义区分以及普通外部中断入口。下一最小单元应先核验 Linux 5.10 x86-64 普通外部中断从 IDT vector 到 `common_interrupt`/irqentry 的实际入口路径，并据此补齐第三部分；完成后再做 A15 整章复核。
+教程：[`docs/15-external-interrupt-entry-and-irq-stack.md`](docs/15-external-interrupt-entry-and-irq-stack.md)
+
+实验：[`labs/15-external-interrupt-entry/`](labs/15-external-interrupt-entry/)
+
+Linux 5.10 源码事实核验：[`source-paths/15-external-interrupt-entry-linux-5.10.md`](source-paths/15-external-interrupt-entry-linux-5.10.md)
+
+语义补充：[`docs/15-fault-trap-interrupt-semantics.md`](docs/15-fault-trap-interrupt-semantics.md)
+
+整章一致性复核：[`docs/15-a15-completion-review.md`](docs/15-a15-completion-review.md)
+
+A15 已完成。第一部分建立普通同步异常的 `IDT gate -> CPU hardware frame -> error-code normalization -> error_entry -> pt_regs -> C handler` 主线；第二部分建立 `TSS.ist[] -> IDT gate.IST -> CPU exception-stack switch -> special entry` 主线；第三部分补齐普通 device IRQ 的 vector stub、hardirq bookkeeping 与可选 per-CPU IRQ stack。章节同时独立区分同步/异步、fault/trap、IDT interrupt/trap gate 和 hardware error code 四个分类轴，并明确 task kernel stack、IST stack 与 IRQ stack 是三个不同机制。三组需要 kernel-GDB 的动态入口观测仍因当前环境缺少匹配 Linux 5.10 guest、`vmlinux` 与调试会话而标记为待实测，不作为已运行结论。下一章进入 A16：缺页异常入口。
 
 ### A16：缺页异常入口
 
@@ -445,7 +455,25 @@ A15 尚未完成：章节大纲还包含 trap/fault/interrupt 的语义区分以
 - 从汇编入口进入内存管理代码；
 - 异常处理完成后的返回。
 
+第一部分：`#PF` 入口、CR2 与 page-fault error code
+
+教程：[`docs/16-page-fault-entry-cr2-and-error-code.md`](docs/16-page-fault-entry-cr2-and-error-code.md)
+
+实验：[`labs/16-page-fault-demand/`](labs/16-page-fault-demand/)
+
+Linux 5.10 源码事实核验：[`source-paths/16-page-fault-entry-linux-5.10.md`](source-paths/16-page-fault-entry-linux-5.10.md)
+
+第二部分：page-fault 内部重试、异常返回与原指令重新执行
+
+教程：[`docs/16-page-fault-retry-and-instruction-restart.md`](docs/16-page-fault-retry-and-instruction-restart.md)
+
+Linux 5.10 源码事实核验：[`source-paths/16-page-fault-retry-return-linux-5.10.md`](source-paths/16-page-fault-retry-return-linux-5.10.md)
+
+整章一致性复核：[`docs/16-a16-completion-review.md`](docs/16-a16-completion-review.md)
+
 缺页处理的主体放在 [`../memory/`](../memory/) 中学习。
+
+A16 已完成。本章把 `faulting instruction -> #PF hardware entry -> saved RIP/CR2/error code -> pt_regs -> exc_page_fault() -> handle_page_fault() -> do_user_addr_fault()/do_kern_addr_fault() -> exception return` 串成完整的汇编入口与交接主线，并严格区分 `VM_FAULT_RETRY` 的 fault-handler 内部重试和恢复 faulting RIP 后 CPU 对原指令的重新执行。可运行 demand-fault 实验已经实际验证合法匿名 VMA 首次写访问从 non-resident 变为 resident、产生 minor fault 并最终完成原写指令；CR2、PF error code 和内核 `pt_regs` 的动态现场仍留给匹配 Linux 5.10 kernel-GDB 环境验证。VMA 查找、页表建立、匿名页分配和 Copy-on-Write 等主体继续留在 memory 课程。下一章进入 A17：上下文切换汇编。
 
 ### A17：上下文切换汇编
 
