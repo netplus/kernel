@@ -425,7 +425,17 @@ Linux 5.10 基础入口源码事实核验：[`source-paths/15-exception-interrup
 
 Linux 5.10 `#DE/#GP` 专项源码事实核验：[`source-paths/15-de-gp-error-code-pt-regs-linux-5.10.md`](source-paths/15-de-gp-error-code-pt-regs-linux-5.10.md)
 
-A15 第一部分已完成正文、两轮 Linux 5.10 源码事实核验、可构建的 `#DE/#GP` 用户态触发实验、kernel-GDB 观察步骤和 expected analysis。该部分已经建立 `IDT gate -> CPU hardware frame -> error-code normalization -> error_entry -> pt_regs -> C handler` 的普通异常入口模型，并明确 `#DE` 的 synthetic `-1` 与 `#GP` hardware error code 在 `orig_ax` 槽中的不同时间关系。当前环境缺少匹配的 Linux 5.10 guest、`vmlinux` 与 kernel-GDB 会话，因此内核动态断点结果继续标记为待真实环境执行。A15 尚未完成，下一部分继续学习 TSS、IST 与特殊异常栈。
+第二部分：TSS、IST 与特殊异常栈
+
+教程：[`docs/15-tss-ist-and-special-exception-stacks.md`](docs/15-tss-ist-and-special-exception-stacks.md)
+
+实验：[`labs/15-tss-ist-special-exception-stacks/`](labs/15-tss-ist-special-exception-stacks/)
+
+Linux 5.10 源码事实核验：[`source-paths/15-tss-ist-special-exceptions-linux-5.10.md`](source-paths/15-tss-ist-special-exceptions-linux-5.10.md)
+
+A15 第一、第二部分已完成。第一部分建立 `IDT gate -> CPU hardware frame -> error-code normalization -> error_entry -> pt_regs -> C handler` 的普通异常入口模型；第二部分建立 `per-CPU exception stack -> TSS.ist[] -> TSS descriptor/TR -> IDT gate.IST -> CPU stack switch -> special entry` 模型，并通过 `#DE/#DB` 对照明确 privilege-level stack switch 与 IST stack switch 不是同一机制。两部分均已完成 Linux 5.10 源码事实核验、正文、实验设计和 expected analysis。需要 kernel-GDB 的动态地址与入口 `%rsp` 结果因当前环境缺少匹配 Linux 5.10 guest、`vmlinux` 与调试会话而继续标记为待实测。
+
+A15 尚未完成：章节大纲还包含 trap/fault/interrupt 的语义区分以及普通外部中断入口。下一最小单元应先核验 Linux 5.10 x86-64 普通外部中断从 IDT vector 到 `common_interrupt`/irqentry 的实际入口路径，并据此补齐第三部分；完成后再做 A15 整章复核。
 
 ### A16：缺页异常入口
 
