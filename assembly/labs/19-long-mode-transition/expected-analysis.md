@@ -108,9 +108,22 @@ lret
 高地址
 ```
 
-这里必须区分“栈槽宽度”和“selector 的有效语义宽度”：源码使用 `pushl` 建立两个 32-bit 槽；far return 从第二个槽取得 code-segment selector 时，真正作为 segment selector 使用的是其 selector 值，而不是把这个场景套成 64-bit `retq`/`iretq` 的 8-byte 栈布局。
+这里必须区分“栈槽宽度”和“selector 的有效语义宽度”：源码使用两次 `pushl`，所以在执行 `lret` 前明确建立了两个 4-byte 槽。对这条 32-bit operand-size 的 protected-mode far return，CPU 取得 32-bit instruction pointer，并从后续 4-byte stack slot 取得 code selector；真正装入 `CS` 的 selector 语义仍是 16 bit。正常完成这次同特权级 far return 后，`ESP` 因这两个槽合计前进 8 bytes。
 
-验收时应以当前构建产物的 `lret` 编码、32-bit operand-size 语义和单步后的 `%esp` 变化共同确认消费宽度；不要仅根据十六进制内存显示猜测槽宽。
+因此本实验不能套用 64-bit `retq` 或 `iretq` 的 8-byte-per-slot 栈模型。验收时应同时检查当前构建产物中的 `lret`、`lret` 前两个 4-byte 槽、单步后的 `CS:EIP/RIP` 目标，以及 `ESP` 的 8-byte 消费关系；如果实际构建因控制流或配置进入了别的入口路径，则应记录实际路径，而不是强套这一结论。
+
+### 3.1 栈顺序为什么不是反的
+
+源码先 `pushl $__KERNEL_CS`，再 `pushl %eax`。因为栈向低地址增长，最终 `%esp` 指向后压入的 target：
+
+```text
+low address
+    target
+    selector slot
+high address
+```
+
+这正是 far return 消费 offset 后再取得 selector 所需要的顺序。
 
 ## 4. GDT 与 CS 的验收关系
 
