@@ -309,13 +309,13 @@ A10 已完成。五个部分已经覆盖内联、尾调用、公共子表达式�
 
 教程：[`docs/11-strong-weak-and-undefined-symbols.md`](docs/11-strong-weak-and-undefined-symbols.md)
 
-实验：[`labs/11-symbol-binding/`](labs/11-symbol-binding/)
+实验：[`labs/11-symbol-resolution/`](labs/11-symbol-resolution/)
 
-第四部分：x86-64 PC-relative relocation
+第四部分：PC-relative relocation
 
-教程：[`docs/11-pc-relative-relocations.md`](docs/11-pc-relative-relocations.md)
+教程：[`docs/11-pc-relative-relocation.md`](docs/11-pc-relative-relocation.md)
 
-实验：[`labs/11-pc-relative-relocations/`](labs/11-pc-relative-relocations/)
+实验：[`labs/11-pc-relative-relocation/`](labs/11-pc-relative-relocation/)
 
 第五部分：静态链接的基本过程
 
@@ -323,15 +323,17 @@ A10 已完成。五个部分已经覆盖内联、尾调用、公共子表达式�
 
 实验：[`labs/11-static-linking/`](labs/11-static-linking/)
 
-A11 已完成。五个部分已经把 section/segment、symbol table、symbol resolution、PC-relative relocation 与最终静态链接串成完整主线，并通过 `readelf`、`objdump`、`nm` 和 linker map 实际验证 input section 到 output section、最终 symbol value 和 relocation 消费过程。下一章进入 A12：PIC、PIE、GOT 与 PLT。
+A11 已完成。五个部分已经覆盖 ELF section/segment、symbol table、strong/weak/undefined symbol resolution、PC-relative relocation，以及多个 relocatable object 合并为最终 executable 的静态链接主线。下一章进入 A12：位置无关代码与动态链接基础。
 
-### A12：PIC、PIE、GOT 与 PLT
+### A12：位置无关代码与动态链接基础
 
-- 位置无关代码；
-- RIP-relative 访问；
-- PIE 和 ASLR；
-- GOT 与 PLT；
-- 动态链接和延迟绑定。
+- PIC；
+- PIE；
+- RIP-relative；
+- GOT；
+- PLT；
+- 动态链接；
+- 延迟绑定的基本原理。
 
 第一部分：位置无关代码、PIE 与 RIP-relative 寻址
 
@@ -341,43 +343,44 @@ A11 已完成。五个部分已经把 section/segment、symbol table、symbol re
 
 第二部分：GOT、GOTPCREL 与动态数据符号解析
 
-教程：[`docs/12-got-and-dynamic-data-relocation.md`](docs/12-got-and-dynamic-data-relocation.md)
+教程：[`docs/12-got-and-dynamic-data-symbols.md`](docs/12-got-and-dynamic-data-symbols.md)
 
-实验：[`labs/12-got-data-access/`](labs/12-got-data-access/)
+实验：[`labs/12-got-dynamic-data/`](labs/12-got-dynamic-data/)
 
 第三部分：PLT、`JUMP_SLOT` 与动态函数调用
 
-教程：[`docs/12-plt-jump-slot-and-binding.md`](docs/12-plt-jump-slot-and-binding.md)
+教程：[`docs/12-plt-and-dynamic-function-calls.md`](docs/12-plt-and-dynamic-function-calls.md)
 
-实验：[`labs/12-plt-dynamic-calls/`](labs/12-plt-dynamic-calls/)
+实验：[`labs/12-plt-dynamic-functions/`](labs/12-plt-dynamic-functions/)
 
-A12 已完成。三个部分已经覆盖位置无关代码与 RIP-relative 寻址、PIE/ASLR、外部数据符号的 GOT/GOTPCREL 动态绑定，以及外部函数调用从 `R_X86_64_PLT32` 经 `.plt/.got.plt` 到 `R_X86_64_JUMP_SLOT` 的完整路径；实验同时对照了默认 lazy binding 与 `-z now` eager binding。下一章进入 A13：Linux x86-64 系统调用 ABI。
+A12 已完成。三个部分已经覆盖 PIC/PIE 与 RIP-relative 基本模型、GOT/GOTPCREL 数据符号间接寻址、PLT/JUMP_SLOT 动态函数调用，以及 lazy binding 与 `-z now` eager binding 的基本差异。下一章进入 A13：系统调用 ABI。
 
-### A13：Linux x86-64 系统调用 ABI
+### A13：系统调用 ABI
 
 - `syscall` 指令；
-- 系统调用号和参数寄存器；
-- `RCX`、`R11` 和 `R10` 的特殊作用；
-- 原始返回值与 `errno`；
-- libc 包装函数与直接系统调用。
+- 系统调用号；
+- 参数寄存器；
+- `RCX` 和 `R11` 的特殊角色；
+- 返回值与错误码；
+- libc wrapper 与原始系统调用的区别。
 
-第一部分：原始 `syscall`、寄存器约定与返回值
+第一部分：Linux x86-64 原始系统调用 ABI
 
-教程：[`docs/13-linux-x86-64-raw-syscall-abi.md`](docs/13-linux-x86-64-raw-syscall-abi.md)
+教程：[`docs/13-linux-x86-64-syscall-abi.md`](docs/13-linux-x86-64-syscall-abi.md)
 
-实验：[`labs/13-raw-syscall-abi/`](labs/13-raw-syscall-abi/)
+实验：[`labs/13-linux-x86-64-syscall-abi/`](labs/13-linux-x86-64-syscall-abi/)
 
 Linux 5.10 源码事实核验：[`source-paths/13-syscall-abi-linux-5.10.md`](source-paths/13-syscall-abi-linux-5.10.md)
 
-A13 已完成。本章已经区分 System V AMD64 普通函数 ABI、x86-64 `syscall` 指令的架构语义、Linux x86-64 syscall ABI 和 libc 用户态包装层；实验实际验证了 `%rax` 系统调用号、`%rdi/%rsi/%rdx/%r10/%r8/%r9` 参数约定、`%rcx/%r11` 的特殊角色、六参数 wrapper 的 `%rcx -> %r10` 适配，以及 raw negative errno 与 libc `-1 + errno` 的接口边界。Linux 5.10 的入口寄存器约定和 syscall number 来源已单独完成源码事实核验。下一章进入 A14：Linux 5.10 系统调用入口与返回。
+A13 已完成。本章建立了 System V AMD64 普通函数 ABI、x86-64 `syscall` 指令语义和 Linux syscall ABI 三个不同层次，实际验证了 `RAX` 系统调用号、`RDI/RSI/RDX/R10/R8/R9` 六参数约定、`RCX/R11` 的特殊角色，以及 raw negative errno 与 libc `errno` 的接口边界。下一章进入 A14：系统调用入口与返回。
 
-### A14：Linux 5.10 系统调用入口与返回
+### A14：系统调用入口与返回
 
 - `entry_SYSCALL_64`；
-- 用户栈与内核栈切换；
+- `swapgs`；
+- 用户栈到内核栈；
 - `pt_regs`；
 - `do_syscall_64`；
-- 返回用户态前的检查；
 - `sysretq` 与 `iretq`。
 
 第一部分：`entry_SYSCALL_64`、内核栈切换与 `pt_regs`
@@ -390,13 +393,13 @@ Linux 5.10 源码事实核验：[`source-paths/14-entry-syscall-64-stack-switch-
 
 第二部分：`do_syscall_64()`、系统调用表与返回值写回
 
-教程：[`docs/14-do-syscall-64-dispatch-and-return-value.md`](docs/14-do-syscall-64-dispatch-and-return-value.md)
+教程：[`docs/14-do-syscall-64-dispatch.md`](docs/14-do-syscall-64-dispatch.md)
 
-实验：[`labs/14-do-syscall-dispatch/`](labs/14-do-syscall-dispatch/)
+实验：[`labs/14-do-syscall-64-dispatch/`](labs/14-do-syscall-64-dispatch/)
 
 Linux 5.10 源码事实核验：[`source-paths/14-do-syscall-64-dispatch-linux-5.10.md`](source-paths/14-do-syscall-64-dispatch-linux-5.10.md)
 
-第三部分：`syscall_exit_to_user_mode()`、SYSRET 快路径与 IRET 回退
+第三部分：系统调用返回、SYSRET 快路径与 IRET 回退
 
 教程：[`docs/14-syscall-exit-sysret-and-iret.md`](docs/14-syscall-exit-sysret-and-iret.md)
 
@@ -404,16 +407,16 @@ Linux 5.10 源码事实核验：[`source-paths/14-do-syscall-64-dispatch-linux-5
 
 Linux 5.10 源码事实核验：[`source-paths/14-syscall-exit-sysret-iret-linux-5.10.md`](source-paths/14-syscall-exit-sysret-iret-linux-5.10.md)
 
-A14 已完成。三部分已经把 `entry_SYSCALL_64` 入口现场、用户栈到内核栈切换、`pt_regs` 构造、`do_syscall_64()` 分派与 `regs->ax` 写回、exit-to-user work，以及最终基于 `pt_regs` 的 SYSRET eligibility 与 IRET 回退串成完整系统调用进入/返回主线。三组 kernel-GDB 实验都已形成可执行步骤；由于当前维护环境缺少匹配的 Linux 5.10 guest、`vmlinux` 与 kernel-GDB 会话，动态断点结果继续明确标记为待真实环境执行，不作为已实测结论。下一章进入 A15：异常、中断与特权级切换。
+A14 已完成。第一部分建立 `entry_SYSCALL_64 -> 保存 user RSP -> kernel stack -> pt_regs` 的入口现场；第二部分建立 `do_syscall_64() -> syscall_enter_from_user_mode() -> sys_call_table[nr](regs) -> regs->ax -> syscall_exit_to_user_mode()` 的分派模型；第三部分建立 exit-to-user work 后基于最终 `pt_regs` 主动选择 SYSRET 快路径或 IRET 慢路径的返回模型。三组需要 kernel-GDB 的动态入口/返回现场仍因当前环境缺少匹配 Linux 5.10 guest、`vmlinux` 与调试会话而标记为待实测，不作为已运行结论。下一章进入 A15：异常与中断入口。
 
-### A15：异常、中断与特权级切换
+### A15：异常与中断入口
 
-- Ring 0 与 Ring 3；
-- IDT、GDT 和 TSS；
+- IDT；
+- GDT 与 TSS；
 - trap、fault 和 interrupt；
-- CPU 自动压栈的内容；
-- 有错误码和无错误码异常；
-- IST 和特殊异常栈。
+- CPU 自动压栈；
+- 错误码；
+- IST 栈。
 
 第一部分：IDT 普通异常入口、error code 与 `pt_regs`
 
@@ -483,7 +486,25 @@ A16 已完成。本章把 `faulting instruction -> #PF hardware entry -> saved R
 - 内核栈切换；
 - 从旧任务返回到新任务的过程。
 
+第一部分：`switch_to`、内核栈切换与控制流恢复
+
+教程：[`docs/17-switch-to-stack-and-control-flow.md`](docs/17-switch-to-stack-and-control-flow.md)
+
+实验：[`labs/17-switch-to-stack-control-flow/`](labs/17-switch-to-stack-control-flow/)
+
+Linux 5.10 源码事实核验：[`source-paths/17-switch-to-linux-5.10.md`](source-paths/17-switch-to-linux-5.10.md)
+
+第二部分：`__switch_to()` 的非栈架构状态
+
+教程：[`docs/17-switch-to-arch-state.md`](docs/17-switch-to-arch-state.md)
+
+实验：[`labs/17-switch-to-arch-state/`](labs/17-switch-to-arch-state/)
+
+Linux 5.10 源码事实核验：[`source-paths/17-switch-to-arch-state-linux-5.10.md`](source-paths/17-switch-to-arch-state-linux-5.10.md)
+
 调度主体放在 [`../scheduler/`](../scheduler/) 中学习。
+
+A17 已完成。第一部分建立 `context_switch() -> switch_to -> __switch_to_asm` 的主线，核对 `inactive_task_frame`、callee-saved GPR、`prev->thread.sp` 保存、`%rsp = next->thread.sp` 和 next 历史控制流恢复；第二部分继续从已经切到 next kernel stack 的现场进入 `__switch_to()`，核对 FS/GS selector/base、TLS、segment、FPU/XSTATE、per-CPU `current_task`、`cpu_current_top_of_stack` 与 TSS/task-stack 状态。两部分共同明确 `thread.sp`、当前 `%rsp`、`task_top_of_stack(next)` 和 privilege-entry stack 不是同一对象。静态源码/结构/顺序已核验；需要匹配 Linux 5.10 `vmlinux` 与 kernel-GDB guest 的动态 `%rsp`、FS/GS、TSS 和 FPU 现场仍标记为待实测，不作为已运行结论。下一章进入 A18：原子指令、内存屏障与内联汇编。
 
 ### A18：原子指令、内存屏障与内联汇编
 
