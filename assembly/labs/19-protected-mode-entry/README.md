@@ -36,6 +36,34 @@ readelf
 
 如果没有可执行 checkout，本实验仍可做源码静态核验，但必须把未执行的构建、反汇编和动态寄存器值标为待实测。
 
+### 2.1 自动验收入口
+
+本目录已经提供两层自动检查和对应的正/负 fixture 自测试：
+
+```text
+verify_startup32_contract.py
+verify_startup32_disassembly.py
+test_verify_startup32_contract.py
+test_verify_startup32_disassembly.py
+```
+
+统一入口由本目录 `Makefile` 提供：
+
+```bash
+# 先验证 checker 自身不会轻易接受错误 fixture
+make test
+
+# 对一份真实 Linux v5.10 checkout 做源码契约检查
+make check-source KERNEL=/path/to/linux-5.10
+
+# 对真实构建产物导出的 objdump -dr 文本做机器指令级检查
+make check-disassembly DISASM=/path/to/startup32-and-verify-cpu.objdump
+```
+
+`check-source` 检查源码中的状态事件顺序和 `verify_cpu()` 两条返回路径；`check-disassembly` 检查真实机器指令中的 `cld/cli`、`lgdt`、segment reload、`verify_cpu` 调用/返回值测试、CR4 写入，以及 success/failure terminal path。两者都属于静态证据，不能替代第 6 节的运行时寄存器观察。
+
+在运行 `check-disassembly` 前，应先从当前构建产物导出同时覆盖 `startup_32` 和 `verify_cpu` 的 GNU `objdump -dr` 文本。不要使用教程中的示意反汇编作为输入，也不要因为 checker 通过就宣称 GDTR hidden state、CR4/CR3/EFER 或当前 CPU execution mode 已经动态验证。
+
 ## 3. 源码静态核验
 
 ### 3.1 确认 `startup_32` 的编码上下文
@@ -188,6 +216,8 @@ verify_cpu 中 pushf/popf 与 CPUID probing
 
 同时输出 AT&T 与 Intel 两种反汇编，重点不是语法偏好，而是确认 operand width、控制流和实际生成指令。
 
+完成手工检查后，再把同一份真实反汇编文本交给 `make check-disassembly`。自动 checker 的作用是防止后续源码/构建变化让关键顺序悄悄漂移；手工检查仍负责确认 operand width、重定位、符号归属和 checker 未覆盖的上下文。
+
 ## 6. 可选 QEMU/GDB 动态观察
 
 只有在具备匹配 v5.10 compressed kernel、QEMU 和早期启动 GDB 环境时执行。不要在普通生产机器上尝试修改这些控制状态。
@@ -228,6 +258,11 @@ EFER（调试器支持 MSR 读取时）
 Kernel: Linux v5.10
 Config:
 Build artifact:
+
+Automated checks:
+  make test:
+  make check-source KERNEL=...:
+  make check-disassembly DISASM=...:
 
 startup_32:
   .code32 evidence:
@@ -274,8 +309,9 @@ Dynamic QEMU/GDB:
 4. 区分 scratch stack 与 `boot_stack_end`，并确认 `verify_cpu` 使用后者；
 5. 核对 `verify_cpu()` 的 0/1 返回契约和 flags 保存/恢复；
 6. 核对 CPU feature check 成功发生在 CR4/CR3/EFER/CR0 long-mode preparation 之前；
-7. 若执行动态实验，只报告当前构建真实观测值；未执行时明确写明环境限制。
+7. `make test` 必须先通过；具备真实 v5.10 checkout/构建产物时，还必须分别运行 `check-source` 和 `check-disassembly`，并保存真实输出；
+8. 若执行动态实验，只报告当前构建真实观测值；未执行时明确写明环境限制。
 
 ## 9. 本次维护环境状态
 
-本实验设计已根据仓库现有 Linux 5.10 source-path 与教程逐项复核。当前维护接口没有提供可执行 Linux v5.10 checkout/QEMU 早期启动调试会话，因此本次未执行 Kbuild、objdump 或动态寄存器采样；这些项目保持为待实测，不能作为已验证数据引用。
+source-contract checker 已经通过 fixture 正/负测试，并已对 upstream Linux v5.10 真实源码文本完成核心契约匹配；objdump checker 已具备正/负 fixture 自测试和统一 Makefile 入口。当前维护环境仍没有可执行 Linux v5.10 checkout/QEMU 早期启动调试会话，因此本次未执行真实 Kbuild、真实构建产物上的 `check-disassembly` 或动态寄存器采样；这些项目保持为待实测，不能作为已验证数据引用。
