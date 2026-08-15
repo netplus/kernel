@@ -206,7 +206,7 @@ A19 使用 `arch/x86/boot/compressed/head_64.S` 的 `startup_32 -> startup_64` �
 
 这些内容都属于“Linux 5.10 如何实现”的层次，不能反向写成 x86-64 架构唯一允许的实现方式。
 
-## 5. 实验覆盖与未实测边界
+## 5. 实验覆盖与验证状态
 
 A19 已有三组实验：
 
@@ -214,7 +214,14 @@ A19 已有三组实验：
 - `labs/19-early-boot-page-tables/`：6-page layout、entry flags、L3/L2 index 和 4 GiB identity map 静态计算；
 - `labs/19-protected-mode-entry/`：GDT/segment/stack/`verify_cpu()` 与后续 long-mode preparation 的时间边界。
 
-每组实验均有 expected analysis。当前维护环境没有可执行 Linux 5.10 checkout 与 QEMU early-boot debug session，因此不能把 Kbuild、objdump、Python 或动态寄存器预期值写成已经运行的结果。这个环境限制不改变源码和静态算术的课程结论，但后续具备实验环境时应补齐实际执行记录。
+每组实验均有 expected analysis。验证状态需要按证据等级分别记录：
+
+- 第二部分 `verify_early_pgtable.py` 已实际执行，24 KiB/6-page 布局、2048 个 2 MiB leaf、4 GiB coverage、`0x183` flags，以及 L2/L3 关键边界断言均通过；这只证明静态算术和边界计算，不等于真实 early page tables 已在 CPU 上运行。
+- 第三部分已经形成 source-contract checker、正/负 fixture tests、对 upstream Linux v5.10 真实源码文本的核心匹配验证，以及独立的 objdump machine-code checker 和对应 fixture tests；这些属于源码/反汇编静态证据。
+- 第三部分的 Makefile 已提供 `make test`、`make check-source KERNEL=...` 和 `make check-disassembly DISASM=...` 三个统一入口，真实 checkout/构建产物可用时应按此顺序执行并记录结果。
+- 当前维护环境仍没有可执行 Linux 5.10 checkout、真实 compressed-kernel 构建产物和 QEMU early-boot debug session，因此不能把 Kbuild、真实 `objdump`、GDTR/segment hidden state、CR4/CR3/EFER、CS/RIP 等预期值写成已经动态验证的结果。
+
+因此，“静态验证已完成的部分”和“仍需真实构建/动态现场的部分”必须分开。后续补齐真实 Kbuild、objdump 或 QEMU/GDB 数据时，应更新对应实验记录，而不是改写已经成立的架构/源码结论。
 
 ## 6. 收章判断
 
