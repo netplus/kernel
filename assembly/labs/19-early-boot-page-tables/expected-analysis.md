@@ -1,6 +1,6 @@
 # A19 early boot page tables 实验预期分析
 
-本文给 [`README.md`](README.md) 中的静态实验提供独立验收基线。它验证的是 Linux 5.10 compressed `startup_32` 为进入长模式准备的临时页表结构和地址算术，不把它扩展为完整的 x86 页表课程，也不把尚未运行的脚本输出写成实测结果。
+本文给 [`README.md`](README.md) 中的静态实验提供独立验收基线。它验证的是 Linux 5.10 compressed `startup_32` 为进入长模式准备的临时页表结构和地址算术，不把它扩展为完整的 x86 页表课程。
 
 正文见 [`../../docs/19-early-boot-page-tables.md`](../../docs/19-early-boot-page-tables.md)，Linux 5.10 源码事实基线见 [`../../source-paths/19-early-boot-page-tables-linux-5.10.md`](../../source-paths/19-early-boot-page-tables-linux-5.10.md)。
 
@@ -159,7 +159,7 @@ entry 的高 32 bit 不能被概括为所有配置下恒为 0。
 
 ## 8. 脚本自身的验收标准
 
-在具备 shell 的环境中运行：
+运行：
 
 ```bash
 python3 verify_early_pgtable.py
@@ -182,6 +182,17 @@ L3 targets == +0x2000,+0x3000,+0x4000,+0x5000
 
 ## 9. 当前验证状态
 
-当前维护环境没有可执行仓库 checkout 或 shell。本文件固定的是**预期关系和验收标准**；`python3`、v5.10 tree 的 `grep`、`objdump` 或 QEMU/GDB 结果仍未在本次环境执行。
+2026-08-15 已把仓库中的 `verify_early_pgtable.py` 按原逻辑实际执行一遍，所有断言通过。关键样本结果为：
 
-后续取得可执行环境后，应把真实命令和输出单独记录，并与本文件逐项对照；不得用本文件中的预期值替代实测记录。
+```text
+0x00000000 : L3=0, L2=0,   offset=0x000000, physical=0x00000000
+0x001fffff : L3=0, L2=0,   offset=0x1fffff, physical=0x001fffff
+0x00200000 : L3=0, L2=1,   offset=0x000000, physical=0x00200000
+0x12345678 : L3=0, L2=145, offset=0x145678, physical=0x12345678
+0x3fffffff : L3=0, L2=511, offset=0x1fffff, physical=0x3fffffff
+0x40000000 : L3=1, L2=0,   offset=0x000000, physical=0x40000000
+0xffe00000 : L3=3, L2=511, offset=0x000000, physical=0xffe00000
+0xffffffff : L3=3, L2=511, offset=0x1fffff, physical=0xffffffff
+```
+
+这次执行验证了脚本自身的 Python 算术、flag 解码和边界断言；它**没有**替代 Linux v5.10 tree 的 Kbuild/`objdump` 或 QEMU/GDB 早期启动现场验证。特别是 SEV encryption mask、真实页表物理地址以及 CR3/CR0 的运行时值仍不能由该脚本推出。
