@@ -55,13 +55,20 @@ def check_text(head, verify):
     ok("boot stack established before verify_cpu", max(seg_positions) < p_stack < p_verify)
     ok("verify_cpu result tested before CR4 preparation", p_verify < p_test < p_cr4)
 
-    p_pushf = pos(verify, r"\bpushf[lq]?\b", "verify_cpu pushf")
-    p_popf = pos(verify[p_pushf:], r"\bpopf[lq]?\b", "verify_cpu popf") + p_pushf
-    ok("verify_cpu saves/restores flags", p_pushf < p_popf)
-
-    # Linux v5.10 verify_cpu returns 0 on success and 1 on failure.
-    ok("verify_cpu has success zeroing of eax", bool(re.search(r"\bxorl\s+%eax,\s*%eax\b", verify)))
-    ok("verify_cpu has failure value 1", bool(re.search(r"\bmovl\s+\$1,\s*%eax\b", verify)))
+    p_pushf = pos(verify, r"\bpushf[lq]?\b", "verify_cpu caller-flags push")
+    no_longmode = re.search(
+        r"^\.Lverify_cpu_no_longmode:\s*$\s*popf\s*(?:#.*)?$\s*movl\s+\$1,\s*%eax\s*$\s*ret\b",
+        verify,
+        re.M,
+    )
+    success = re.search(
+        r"^\.Lverify_cpu_sse_ok:\s*$\s*popf\s*(?:#.*)?$\s*xorl\s+%eax,\s*%eax\s*$\s*ret\b",
+        verify,
+        re.M,
+    )
+    ok("verify_cpu saves caller flags", p_pushf >= 0)
+    ok("verify_cpu failure path restores flags and returns eax=1", no_longmode is not None)
+    ok("verify_cpu success path restores flags and returns eax=0", success is not None)
 
     return checks
 
