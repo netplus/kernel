@@ -40,9 +40,9 @@ arch/x86/kernel/verify_cpu.S
 
 `verify_cpu.S` 部分检查：
 
-- probing 前后存在 flags 保存/恢复路径；
-- success path 把 `%eax` 置为 0；
-- failure path 把 `%eax` 置为 1。
+- probing 前保存 caller flags；
+- failure path 在返回前 `popf`，随后返回 `%eax=1`；
+- success path 在返回前 `popf`，随后返回 `%eax=0`。
 
 因此脚本可以自动守住“feature gate 成功发生在后续 CR4 preparation 之前”这一课程边界，但不能据此推出 `CR4.PAE`、`CR3`、`EFER.LME`、`CR0.PG` 或 `CS.L` 已经建立。
 
@@ -65,4 +65,36 @@ far lret 前后的 CS/RIP
 
 脚本成功时应逐项输出 `PASS:`，最后输出通过的检查数量；任一关键源码模式缺失或顺序关系不满足时，以非零状态退出并输出 `FAIL:`。因此后续若在 Linux 5.10 基线上调整第三部分教程、实验或 source-path，应先运行该脚本，再判断是源码事实发生变化、脚本模式过窄，还是课程内容需要修订。
 
-当前维护环境已对脚本本身完成 Python 语法检查，但没有可执行的 Linux v5.10 checkout，因此尚未执行针对真实 `head_64.S` / `verify_cpu.S` 文件的整套检查。这个限制只影响“脚本已在真实源码树运行”的证据，不改变已经单独完成的 Linux 5.10 源码事实核验。
+## 5. 本轮对 Linux v5.10 实际源码的核验记录
+
+本轮重新读取 upstream Linux `v5.10` 的两个真实源文件，并把 checker 当前使用的模式逐项对照到实际文本：
+
+```text
+arch/x86/boot/compressed/head_64.S
+  .code32
+  SYM_FUNC_START(startup_32)
+  cld / cli
+  lgdt
+  __BOOT_DS -> DS/ES/FS/GS/SS
+  ESP = rva(boot_stack_end)(EBP)
+  call verify_cpu
+  testl %eax,%eax
+  ...
+  movl %eax,%cr4
+
+arch/x86/kernel/verify_cpu.S
+  pushf                         # 保存 caller flags
+  ...
+.Lverify_cpu_no_longmode:
+  popf
+  movl $1,%eax
+  ret
+.Lverify_cpu_sse_ok:
+  popf
+  xorl %eax,%eax
+  ret
+```
+
+随后使用 checker 的同一组正则和顺序判定，对上述 Linux v5.10 实际源码片段执行 `check_text()`；入口顺序、caller-flags 保存、failure return 和 success return 四类检查均通过。这一步比仅做 Python 语法检查更强：它确认当前 checker 的关键模式能够匹配 v5.10 的真实源码写法，而不是只匹配自测试构造的 fixture。
+
+当前环境仍没有完整 Linux v5.10 文件系统 checkout，因此尚未通过脚本的命令行 `main()` 直接打开 `/path/to/linux-5.10` 执行整文件检查，也没有运行 Kbuild、objdump 或 QEMU/GDB。这里记录的结果只证明 **checker 核心匹配/顺序逻辑已经对照真实 v5.10 源码文本执行通过**；不能把它扩大为构建产物或动态机器状态的验证结果。
