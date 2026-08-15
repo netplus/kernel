@@ -3,7 +3,7 @@
 
 These tests do not replace running the checker against a Linux v5.10 checkout.
 They verify that the checker accepts the intended source ordering and rejects
-several important ordering/contract regressions instead of silently passing.
+important ordering/contract regressions instead of silently passing.
 """
 
 import importlib.util
@@ -68,7 +68,19 @@ class Startup32ContractTests(unittest.TestCase):
         bad = HEAD_OK.replace(
             "        lgdt    (%eax)\n        movl    $__BOOT_DS, %eax\n",
             "        movl    $__BOOT_DS, %eax\n        movl    %eax, %ds\n        lgdt    (%eax)\n",
-        ).replace("        movl    %eax, %ds\n        movl    %eax, %es\n", "        movl    %eax, %es\n", 1)
+        ).replace(
+            "        movl    %eax, %ds\n        movl    %eax, %es\n",
+            "        movl    %eax, %es\n",
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            CHECKER.check_text(bad, VERIFY_OK)
+
+    def test_rejects_segment_reload_order_change(self):
+        bad = HEAD_OK.replace(
+            "        movl    %eax, %fs\n        movl    %eax, %gs\n",
+            "        movl    %eax, %gs\n        movl    %eax, %fs\n",
+        )
         with self.assertRaises(AssertionError):
             CHECKER.check_text(bad, VERIFY_OK)
 
@@ -80,14 +92,36 @@ class Startup32ContractTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             CHECKER.check_text(bad, VERIFY_OK)
 
-    def test_rejects_missing_flags_restore(self):
-        bad = VERIFY_OK.replace("        popf\n        movl $1,%eax\n", "        nop\n        movl $1,%eax\n", 1).replace(
-            "        popf\n        xorl %eax, %eax\n", "        nop\n        xorl %eax, %eax\n", 1
+    def test_rejects_cr4_preparation_before_verify_result_test(self):
+        bad = HEAD_OK.replace(
+            "        testl   %eax, %eax\n        jnz     .Lno_longmode\n        movl    %cr4, %eax\n        orl     $0x20, %eax\n        movl    %eax, %cr4\n",
+            "        movl    %cr4, %eax\n        orl     $0x20, %eax\n        movl    %eax, %cr4\n        testl   %eax, %eax\n        jnz     .Lno_longmode\n",
+        )
+        with self.assertRaises(AssertionError):
+            CHECKER.check_text(bad, VERIFY_OK)
+
+    def test_rejects_missing_failure_flags_restore(self):
+        bad = VERIFY_OK.replace(
+            ".Lverify_cpu_no_longmode:\n        popf\n        movl $1,%eax\n",
+            ".Lverify_cpu_no_longmode:\n        nop\n        movl $1,%eax\n",
         )
         with self.assertRaises(AssertionError):
             CHECKER.check_text(HEAD_OK, bad)
 
-    def test_rejects_missing_success_zero(self):
+    def test_rejects_missing_success_flags_restore(self):
+        bad = VERIFY_OK.replace(
+            ".Lverify_cpu_sse_ok:\n        popf\n        xorl %eax, %eax\n",
+            ".Lverify_cpu_sse_ok:\n        nop\n        xorl %eax, %eax\n",
+        )
+        with self.assertRaises(AssertionError):
+            CHECKER.check_text(HEAD_OK, bad)
+
+    def test_rejects_wrong_failure_value(self):
+        bad = VERIFY_OK.replace("        movl $1,%eax\n", "        movl $2,%eax\n")
+        with self.assertRaises(AssertionError):
+            CHECKER.check_text(HEAD_OK, bad)
+
+    def test_rejects_wrong_success_value(self):
         bad = VERIFY_OK.replace("        xorl %eax, %eax\n", "        movl $2,%eax\n")
         with self.assertRaises(AssertionError):
             CHECKER.check_text(HEAD_OK, bad)
