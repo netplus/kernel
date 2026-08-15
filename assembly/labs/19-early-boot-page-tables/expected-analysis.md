@@ -128,7 +128,7 @@ physical     = 0x12345678
 - `0x3fffffff -> 0x40000000` 必须体现 L2 从 511 回到 0，同时 L3 从 0 进到 1；
 - `0xffffffff` 必须落在第四张 L2 table 的最后一个 leaf 中。
 
-若脚本对这些边界的 index 或 offset 不满足上述关系，应先修正算术，不能用“仍然得到 identity address”掩盖 index 错误。
+当前 `verify_early_pgtable.py` 已把上述六个边界地址全部纳入自动断言。对边界样本不仅要求 `physical == linear`，还会分别断言 `(L3 index, L2 index, offset)`，因此不能再由 identity-address 相等掩盖 index 进位错误。
 
 ## 6. 三个时间点不能混为一谈
 
@@ -175,11 +175,10 @@ coverage == 4 GiB
 0x183 -> P=1,RW=1,US=0,PS=1,G=1
 L3 targets == +0x2000,+0x3000,+0x4000,+0x5000
 所有 samples 的 physical == linear
+六个边界 samples 的 L3/L2/offset 与第 5 节逐项一致
 ```
 
 脚本使用 `assert`，任一硬关系失败都应视为实验失败并回到源码/算术重新核对。
-
-还应人工补查 `0x3fffffff`，因为当前脚本样本直接包含 `0x40000000`，但 README 对这一 L3 边界使用了前后两个地址描述。后续若修改脚本，可把 `0x3fffffff` 加入 samples，使边界两侧都自动验收。
 
 ## 9. 当前验证状态
 
