@@ -98,3 +98,32 @@ arch/x86/kernel/verify_cpu.S
 随后使用 checker 的同一组正则和顺序判定，对上述 Linux v5.10 实际源码片段执行 `check_text()`；入口顺序、caller-flags 保存、failure return 和 success return 四类检查均通过。这一步比仅做 Python 语法检查更强：它确认当前 checker 的关键模式能够匹配 v5.10 的真实源码写法，而不是只匹配自测试构造的 fixture。
 
 当前环境仍没有完整 Linux v5.10 文件系统 checkout，因此尚未通过脚本的命令行 `main()` 直接打开 `/path/to/linux-5.10` 执行整文件检查，也没有运行 Kbuild、objdump 或 QEMU/GDB。这里记录的结果只证明 **checker 核心匹配/顺序逻辑已经对照真实 v5.10 源码文本执行通过**；不能把它扩大为构建产物或动态机器状态的验证结果。
+
+## 6. checker 自测试的实际执行记录
+
+本轮把仓库当前的 `verify_startup32_contract.py` 与 `test_verify_startup32_contract.py` 放入可执行 Python 环境，实际运行：
+
+```bash
+python3 -m unittest -v test_verify_startup32_contract.py
+```
+
+结果为：
+
+```text
+Ran 9 tests in 0.001s
+OK
+```
+
+九个测试全部通过，覆盖一个正例和八类回归拒绝条件：
+
+- 正常 `startup_32` / `verify_cpu` fixture 可以通过；
+- `lgdt` 晚于 data-segment reload 会被拒绝；
+- `DS/ES/FS/GS/SS` reload 顺序被破坏会被拒绝；
+- `boot_stack_end` 晚于 `verify_cpu()` 建立会被拒绝；
+- `testl %eax,%eax` 之前提前写 CR4 会被拒绝；
+- failure path 缺失 `popf` 会被拒绝；
+- success path 缺失 `popf` 会被拒绝；
+- failure path 返回错误 `%eax` 值会被拒绝；
+- success path 返回错误 `%eax` 值会被拒绝。
+
+这次实际执行验证的是 checker 自身对已设计契约的接受/拒绝行为，不等价于在完整 Linux v5.10 checkout 上执行 `check-source`。因此证据层次仍保持为：fixture self-test 已实际运行；真实 v5.10 源码文本的核心匹配已验证；完整 checkout CLI、Kbuild/objdump 和 QEMU/GDB 仍待相应环境。
