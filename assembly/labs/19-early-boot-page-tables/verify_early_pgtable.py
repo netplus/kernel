@@ -50,10 +50,30 @@ def main() -> None:
     assert l3_targets == [0x2000, 0x3000, 0x4000, 0x5000]
     print("l3_targets=" + ",".join(f"+0x{x:04x}" for x in l3_targets))
 
-    samples = [0x0, 0x1fffff, 0x200000, 0x12345678, 0x40000000, 0xffe00000, 0xffffffff]
+    samples = [
+        0x0,
+        0x1fffff,
+        0x200000,
+        0x12345678,
+        0x3fffffff,
+        0x40000000,
+        0xffe00000,
+        0xffffffff,
+    ]
+    expected_boundaries = {
+        0x001fffff: (0, 0, 0x1fffff),
+        0x00200000: (0, 1, 0),
+        0x3fffffff: (0, 511, 0x1fffff),
+        0x40000000: (1, 0, 0),
+        0xffe00000: (3, 511, 0),
+        0xffffffff: (3, 511, 0x1fffff),
+    }
+
     for linear in samples:
         l3, l2, off, physical = walk_identity(linear)
         assert physical == linear
+        if linear in expected_boundaries:
+            assert (l3, l2, off) == expected_boundaries[linear]
         print(
             f"linear=0x{linear:08x} l3={l3} l2={l2} "
             f"offset=0x{off:05x} physical=0x{physical:08x}"
