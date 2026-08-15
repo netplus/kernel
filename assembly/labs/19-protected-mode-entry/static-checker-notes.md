@@ -127,3 +127,24 @@ OK
 - success path 返回错误 `%eax` 值会被拒绝。
 
 这次实际执行验证的是 checker 自身对已设计契约的接受/拒绝行为，不等价于在完整 Linux v5.10 checkout 上执行 `check-source`。因此证据层次仍保持为：fixture self-test 已实际运行；真实 v5.10 源码文本的核心匹配已验证；完整 checkout CLI、Kbuild/objdump 和 QEMU/GDB 仍待相应环境。
+
+## 7. objdump checker 自测试的实际执行记录
+
+本轮继续把仓库当前的 `verify_startup32_disassembly.py` 与 `test_verify_startup32_disassembly.py` 放入可执行 Python 环境，实际运行：
+
+```bash
+python3 test_verify_startup32_disassembly.py
+```
+
+进程返回值为 `0`，输出为：
+
+```text
+PASS: A19 disassembly checker positive fixture
+PASS: A19 disassembly checker negative fixtures
+```
+
+正例验证 checker 能从 GNU `objdump` 风格文本中解析 `startup_32` 和 `verify_cpu`，并接受预期的 `cld -> cli -> lgdt -> DS/ES/FS/GS/SS reload -> call verify_cpu -> test %eax -> CR4 write` 顺序，以及 failure/success 两条 `popf -> EAX -> ret` terminal path。
+
+负例则实际确认 checker 会拒绝：缺失 `lgdt`、segment reload 顺序破坏、在检查 `verify_cpu()` 返回值之前提前写 CR4、failure path 错误返回零、success path 错误返回一，以及 success path 缺失 `popf`。因此当前 parser/contract logic 的正负 fixture 行为已经实际执行，而不是仅完成脚本编写。
+
+这一步仍然只是 **objdump checker 自身的 fixture 验证**。当前环境没有 Linux v5.10 的真实构建产物，所以尚未执行 `make check-disassembly DISASM=...`；也不能据此声称真实 `startup_32` 机器码或运行时 GDTR、segment hidden state、CR4/CR3/EFER/CS/RIP 已经动态验证。
