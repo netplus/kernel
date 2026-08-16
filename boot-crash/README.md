@@ -1,65 +1,67 @@
 # x86_64 启动、Kexec 与 Kdump
 
-本目录学习 x86_64 Linux 内核的启动过程，以及 `kexec`、`kdump` 和 `vmcore` 的工作原理。源码以 Linux kernel 5.10 为主要基线。
-
-这几部分内容关系紧密：
+本目录学习 x86_64 Linux kernel 5.10 的正常启动、Kexec、Kdump 与 vmcore。课程始终围绕一个问题组织：**当前是谁在执行、依赖什么运行环境、留下什么状态、如何把控制权交给下一阶段。**
 
 ```text
 正常启动
-固件或引导程序 → 内核早期入口 → start_kernel → 用户空间
+firmware / boot loader → setup → compressed kernel → formal kernel → start_kernel → user space
 
 Kexec
-当前内核准备新内核 → 停止当前系统 → 直接跳转到新内核
+当前内核准备新映像 → 收缩运行环境 → relocation / purgatory → 新内核
 
 Kdump
-生产内核发生 panic → crash_kexec → 捕获内核启动 → 导出 vmcore
+生产内核 panic → crash_kexec → 捕获内核 → /proc/vmcore → 持久化与离线分析
 ```
 
-Kdump 可以看作 Kexec 的一个特殊用途。它预先保留一段内存并加载第二套内核。当生产内核崩溃时，不再经过固件和普通引导程序，而是直接切换到这套捕获内核。捕获内核随后读取生产内核留下的内存，并把它保存为 `vmcore`。
+Kdump 使用 Kexec 的内核切换能力，但运行条件更恶劣：生产内核已经发生严重故障，因此锁、调度、设备和部分内存状态都可能不可信。课程会明确区分正常路径与 crash path，不把二者写成同一条调用链。
 
 ## 学习目标
 
-完成本部分后，应能够说明：
+完成本领域后，应能够说明：
 
-1. x86_64 Linux 从引导程序进入 `start_kernel()` 的主要过程；
-2. 压缩内核、早期页表、长模式和内核重定位分别解决什么问题；
-3. `kexec` 如何在不重新经过固件的情况下启动另一个内核；
-4. Kdump 中生产内核、捕获内核和保留内存的关系；
-5. `crashkernel=` 为什么必须在生产内核启动时预留内存；
-6. panic 之后如何进入 `crash_kexec()`；
-7. 捕获内核如何通过 `elfcorehdr` 和 `/proc/vmcore` 访问崩溃现场；
-8. `vmcore`、`vmlinux`、调试符号、Build ID 和内核模块之间如何匹配；
-9. 如何使用 `makedumpfile` 和 `crash` 保存并分析内核转储；
-10. Kdump 在 NMI、死锁、设备失控和内存损坏场景中的能力与限制。
+1. x86_64 Linux 从 boot loader 进入 `start_kernel()` 并最终执行用户态 init 的主要阶段；
+2. boot protocol、`boot_params`、compressed kernel、early page tables、long mode 和正式内核入口分别解决什么问题；
+3. Kexec 的加载阶段与真正切换阶段为何分离；
+4. Kdump 中生产内核、捕获内核、`crashkernel=` 保留内存和旧内核物理内存之间的关系；
+5. panic 后如何进入 `crash_kexec()`，以及崩溃上下文为何不能继续依赖正常内核基础设施；
+6. `elfcorehdr`、`VMCOREINFO` 和 `/proc/vmcore` 如何把旧内核现场暴露给捕获内核；
+7. 如何使用匹配的 `vmlinux`、模块符号、Build ID、`makedumpfile` 和 `crash` 建立可复核的故障证据链；
+8. Kdump 在 NMI、死锁、DMA、内存损坏、CPU 停止失败和捕获内核启动失败等场景中的能力边界。
 
 ---
 
 # 第一部分：x86_64 内核启动
 
-## B00：启动过程概览
+## B00：启动过程概览【已完成】
 
-先建立完整主线：
+先建立完整阶段模型：
 
 ```text
-固件
-→ 引导程序
-→ Linux boot protocol
-→ 压缩内核入口
-→ 解压和重定位
-→ 64 位内核早期入口
-→ x86_64_start_kernel
-→ start_kernel
-→ rest_init
-→ kernel_init
-→ 第一个用户空间程序
+firmware
+→ boot loader / Linux boot protocol
+→ setup / boot_params
+→ compressed kernel
+→ extract_kernel()
+→ formal-kernel startup_64
+→ x86_64_start_kernel()
+→ x86_64_start_reservations()
+→ start_kernel()
+→ rest_init()
+→ kernel_init / kthreadd / idle
+→ exec init
+→ user space
 ```
 
-本章重点区分：
+本章重点不是背一条伪 C 调用链，而是区分 setup、compressed image、formal kernel、架构早期 C 初始化、通用初始化以及 PID 1 越过 exec 边界这几个不同执行阶段。尤其必须区分 `arch/x86/boot/compressed/head_64.S:startup_64` 与 `arch/x86/kernel/head_64.S:startup_64`：它们属于不同映像和链接上下文。
 
-- 固件负责什么；
-- 引导程序负责什么；
-- 内核自己的早期启动代码负责什么；
-- 什么时候可以使用普通的内核基础设施。
+已完成内容：
+
+- [正式教程：x86_64 Linux 启动过程概览](docs/00-boot-overview.md)
+- [Linux 5.10 源码路径与阶段交接核验](source-paths/00-boot-overview-linux-5.10.md)
+- [实验：启动阶段源码与符号归属](labs/00-boot-overview/)
+- [B00 收章复核](docs/00-b00-completion-review.md)
+
+实验已经建立 source-contract checker，并实际执行通过 8-case fixture self-test。真实 Linux v5.10 checkout 上的 checker、compressed/formal ELF 的 `nm/readelf/objdump` 和 QEMU/GDB 动态启动观察仍属于增强证据，不冒充为已执行结果。
 
 ## B01：Linux boot protocol 与内核映像
 
@@ -67,8 +69,9 @@ Kdump 可以看作 Kexec 的一个特殊用途。它预先保留一段内存并�
 
 - `bzImage` 的基本组成；
 - setup 部分与保护模式内核部分；
-- 引导参数和 `boot_params`；
-- 内核命令行、initrd 和内存映射如何传入内核；
+- boot protocol header 与版本协商；
+- `boot_params` 的角色和布局；
+- 内核命令行、initrd 和内存映射如何由 boot loader 传入；
 - 为什么内核映像需要自描述的引导协议。
 
 建议源码：
@@ -84,12 +87,11 @@ arch/x86/include/uapi/asm/bootparam.h
 
 主要内容：
 
-- 压缩内核为什么需要单独的启动环境；
-- 临时栈和临时页表；
-- CPU 模式检查；
+- compressed kernel 为什么需要独立启动环境；
+- 临时栈、CPU 能力检查和临时页表；
 - 内核解压；
 - KASLR 与物理装载位置；
-- 解压完成后如何跳转到正式内核。
+- 解压完成后如何把控制权交给正式内核。
 
 建议源码：
 
@@ -99,16 +101,18 @@ arch/x86/boot/compressed/misc.c
 arch/x86/boot/compressed/kaslr.c
 ```
 
-## B03：`head_64.S` 与早期页表
+其中 GDT、控制寄存器、long-mode transition 等机器执行机制由 [`assembly/`](../assembly/) 课程完整解释；本领域关注这些状态在启动阶段之间如何交接。
+
+## B03：formal `head_64.S` 与早期页表
 
 主要内容：
 
-- 64 位内核入口；
-- 内核虚拟地址和物理地址的关系；
-- 早期页表为什么还要继续调整；
+- 解压后的 64 位内核入口；
+- 内核虚拟地址与物理地址的关系；
+- 为什么进入正式内核后还要继续调整早期地址空间；
 - 内核映像重定位；
-- BSP 与 AP 启动入口的区别；
-- 何时建立较完整的内核地址空间。
+- BSP 与 AP 入口的边界；
+- 何时具备进入更完整内存管理初始化的条件。
 
 建议源码：
 
@@ -118,16 +122,18 @@ arch/x86/kernel/head64.c
 arch/x86/mm/ident_map.c
 ```
 
+完整页表机制放在 [`memory/`](../memory/)；本章只讲启动所需的页表状态和交接点。
+
 ## B04：从 `x86_64_start_kernel()` 到 `start_kernel()`
 
 主要内容：
 
-- 清理早期 BSS 和启动状态；
+- 早期 BSS 和启动状态处理；
 - 早期异常处理；
-- 命令行和内存信息；
+- `boot_params`、命令行和内存信息的接管；
 - `setup_arch()`；
-- 页分配器、调度器、时钟、中断和 RCU 的初始化顺序；
-- 为什么初始化顺序不能任意改变。
+- 架构初始化与通用 `start_kernel()` 的边界；
+- 页分配器、调度器、时钟、中断和 RCU 等初始化为何存在顺序约束。
 
 建议源码：
 
@@ -139,23 +145,18 @@ init/main.c
 
 ## B05：从 `start_kernel()` 到用户空间
 
-主要内容：
+主要主线：
 
 ```text
-start_kernel
-→ arch_call_rest_init
-→ rest_init
-→ kernel_init
-→ run_init_process
+start_kernel()
+→ arch_call_rest_init()
+→ rest_init()
+→ kernel_init()
+→ run_init_process()
+→ user-space init
 ```
 
-重点说明：
-
-- idle 任务如何形成；
-- `kthreadd` 如何启动；
-- initcall 如何初始化各子系统和驱动；
-- initramfs 与根文件系统；
-- `/sbin/init` 或其他 init 程序如何成为第一个用户空间进程。
+重点说明 idle 任务、`kthreadd`、initcall、initramfs/rootfs，以及“创建 PID 1”与“PID 1 成功 exec 用户态 init”为什么是两个不同时间点。
 
 ---
 
@@ -163,26 +164,26 @@ start_kernel
 
 ## B06：Kexec 解决什么问题
 
-普通重启通常会重新经过固件和引导程序。Kexec 允许当前 Linux 内核直接启动另一个内核，可以减少重启路径，也为 Kdump 提供内核切换机制。
-
-需要区分：
+建立普通 reboot 与 Kexec 的差异，并区分：
 
 ```text
-正常 kexec
+normal kexec
 为了快速启动另一个正常内核。
 
 crash kexec
 为了在当前内核崩溃后启动捕获内核。
 ```
 
-## B07：Kexec 镜像的加载
+重点理解为什么“不重新经过 firmware”意味着旧内核必须主动为新内核准备可接受的 CPU、内存和映像状态。
+
+## B07：Kexec 映像的加载
 
 主要内容：
 
 - `kexec_load` 与 `kexec_file_load`；
-- 内核、initramfs 和命令行如何组成待启动映像；
+- kernel、initramfs、command line 如何组成待启动映像；
 - segment 如何放入目标物理内存；
-- 加载阶段与真正切换阶段为什么分开；
+- 加载阶段与真正切换阶段为什么分离；
 - 签名验证和安全限制的基本作用。
 
 建议源码：
@@ -196,24 +197,18 @@ arch/x86/kernel/kexec-bzimage64.c
 
 ## B08：从当前内核切换到新内核
 
-主要内容：
+主要主线：
 
 ```text
-触发 kexec
-→ 停止普通任务和设备活动
-→ 关闭或隔离其他 CPU
-→ 保存必要状态
-→ 执行重定位代码
-→ 建立新内核要求的入口状态
-→ 跳转到新内核
+trigger kexec
+→ stop ordinary activity
+→ quiesce / isolate CPUs and devices
+→ enter relocation code
+→ establish new-kernel entry state
+→ transfer control
 ```
 
-重点说明：
-
-- 为什么不能继续依赖当前内核的大部分服务；
-- 为什么切换代码必须小而独立；
-- CPU、页表、中断和设备状态如何影响切换；
-- 正常 Kexec 与 crash Kexec 在关闭流程上的区别。
+重点说明切换阶段为何不能继续依赖当前内核的大部分服务，以及正常 Kexec 与 crash Kexec 在 shutdown 假设上的差异。
 
 建议源码：
 
@@ -227,8 +222,8 @@ arch/x86/kernel/relocate_kernel_64.S
 
 主要内容：
 
-- Purgatory 位于旧内核和新内核之间；
-- 为什么需要一段独立执行的过渡代码；
+- Purgatory 位于旧内核和新内核之间的原因；
+- 独立过渡代码的执行约束；
 - 映像校验；
 - 入口参数准备；
 - Purgatory 与正式新内核入口的边界。
@@ -245,67 +240,45 @@ arch/x86/purgatory/
 
 ## B10：生产内核与捕获内核
 
-Kdump 使用两套内核：
-
-```text
-生产内核
-正常承载业务。发生 panic 时提供崩溃现场。
-
-捕获内核
-预先加载到保留内存中。生产内核崩溃后启动，负责保存 vmcore。
-```
-
-捕获内核应尽量小，并使用较少的驱动和内存。它不能依赖生产内核仍然正常工作。
+建立双内核模型：生产内核正常承载业务并留下崩溃现场；捕获内核预先放入保留内存，在 panic 后启动并负责保存 vmcore。捕获内核必须尽量少依赖生产内核仍然正常工作。
 
 ## B11：`crashkernel=` 与保留内存
 
 主要内容：
 
-- 为什么必须在生产内核启动时预留内存；
-- 保留区为什么不能再交给普通页分配器；
+- 为什么生产内核启动时就必须预留 crash kernel 内存；
+- 保留区为何不能再交给普通页分配器；
 - 固定大小、范围选择和高低端预留的基本形式；
 - 捕获内核、initramfs、Purgatory 和控制结构如何使用保留区；
 - 预留过小和过大的影响。
 
-与内存课程的联系：
+与 [`memory/`](../memory/) 的交接点：
 
 ```text
-启动参数
-→ memblock 预留
-→ 普通内存初始化时排除 crashkernel 区域
+boot parameter
+→ memblock reservation
+→ ordinary memory initialization excludes crashkernel region
 ```
 
 ## B12：捕获内核的预加载
 
-主要内容：
-
-- kdump 服务如何加载捕获内核；
-- 捕获内核命令行；
-- `nr_cpus=1`、内存限制等常见配置的目的；
-- initramfs 中为什么需要存储、网络或文件系统驱动；
-- 如何确认 crash kernel 已经加载。
+主要内容：捕获内核和 initramfs 的加载、捕获内核 command line、常见 CPU/内存约束、必要存储或网络驱动，以及如何确认 crash kernel 已经成功加载。
 
 ## B13：从 panic 到 `crash_kexec()`
 
 主要路径：
 
 ```text
-严重错误
+fatal error
 → panic
-→ 停止或通知其他 CPU
-→ 保存崩溃 CPU 状态
+→ stop / notify other CPUs
+→ save crash CPU state
 → crash_kexec
 → machine_crash_shutdown
-→ 跳转到捕获内核
+→ capture kernel
 ```
 
-重点说明：
-
-- panic 路径与普通重启路径的区别；
-- 为什么崩溃环境中锁、调度和设备状态都不可信；
-- 各 CPU 寄存器和崩溃注释如何保存；
-- NMI、watchdog 和多 CPU 停止过程；
-- 哪些情况下 `crash_kexec()` 可能无法执行。
+重点说明 panic path 与正常 reboot path 的区别，以及为什么崩溃上下文中的锁、调度、设备和内存状态不能按正常路径假设。
 
 建议源码：
 
@@ -319,12 +292,12 @@ arch/x86/kernel/machine_kexec_64.c
 
 ## B14：捕获内核如何访问旧内核内存
 
-捕获内核启动后，看到的主要内存内容仍然来自生产内核崩溃时的物理内存。课程重点解释：
+主要内容：
 
-- 捕获内核为什么不能把旧内存当作普通可分配内存；
-- `elfcorehdr` 如何描述需要导出的物理内存和 CPU 状态；
-- `/proc/vmcore` 如何以 ELF core 文件形式呈现崩溃现场；
-- `VMCOREINFO` 为什么需要记录符号、结构体偏移和页大小等信息；
+- 为什么旧内核物理内存不能被捕获内核当作普通可分配内存；
+- `elfcorehdr` 如何描述导出的物理内存和 CPU 状态；
+- `/proc/vmcore` 如何呈现 ELF core 视图；
+- `VMCOREINFO` 为什么需要记录符号和结构布局信息；
 - 保留区、不可导出区域和过滤区域。
 
 建议源码：
@@ -337,195 +310,92 @@ include/linux/crash_core.h
 
 ## B15：保存 `vmcore`
 
-主要内容：
-
-- 直接复制 `/proc/vmcore`；
-- `makedumpfile` 的过滤和压缩；
-- 文件系统、本地磁盘、网络和远程存储；
-- dump 级别；
-- 磁盘空间和写入时间；
-- 保存失败时应检查哪些环节。
-
 重点区分：
 
 ```text
 /proc/vmcore
 捕获内核提供的崩溃内存视图。
 
-保存后的 vmcore 文件
-从 /proc/vmcore 复制或过滤得到的持久化转储。
+saved vmcore
+从 /proc/vmcore 复制、过滤或压缩后得到的持久化转储。
 ```
+
+学习直接复制、`makedumpfile` 的过滤/压缩、dump level、存储目标、空间与时间约束，以及保存失败的分层定位方法。
 
 ## B16：使用 Crash 分析 `vmcore`
 
-分析前必须准备匹配的：
+分析前必须准备匹配的 `vmcore`、带调试信息的 `vmlinux`、模块调试文件、内核版本/配置和 Build ID。基础证据链为：
 
 ```text
-vmcore
-带调试信息的 vmlinux
-对应的内核模块调试文件
-内核版本、Build ID 和配置
+kernel identity
+→ panic/log
+→ CPU and current task
+→ stack
+→ registers and faulting instruction
+→ relevant objects
+→ reconstruct execution path
 ```
 
-基础分析流程：
-
-```text
-确认崩溃内核版本
-→ 查看 panic 信息
-→ 查看当前任务和各 CPU
-→ 展开调用栈
-→ 查看寄存器和故障指令
-→ 检查 task、内存、锁或网络对象
-→ 还原故障发生前的执行路径
-```
-
-重点命令可包括：
-
-```text
-sys
-log
-bt
-bt -a
-ps
-task
-regs
-dis
-kmem
-vm
-files
-net
-struct
-list
-```
+常用命令包括 `sys`、`log`、`bt`、`bt -a`、`ps`、`task`、`regs`、`dis`、`kmem`、`vm`、`struct` 和 `list`。具体命令必须服务于证据链，而不是命令罗列。
 
 ## B17：符号匹配与调用栈展开
 
 主要内容：
 
-- `vmlinux`、`System.map`、kallsyms 和模块符号；
-- Build ID；
+- `vmlinux`、`System.map`、kallsyms 与模块符号；
+- Build ID 与版本/配置匹配；
 - KASLR 地址修正；
-- 函数名、模块名和相对偏移；
-- frame pointer、DWARF 和 ORC unwinder；
-- 内联函数、尾调用和栈损坏；
-- 为什么错误的符号文件可能生成看似合理但实际错误的结果。
+- 函数名、模块名与相对偏移；
+- frame pointer、DWARF 与 ORC unwinder；
+- inline、tail call 和 stack corruption；
+- 为什么错误符号可能产生“看似合理”的错误栈。
 
 ## B18：Kdump 的限制与失效场景
 
-需要客观看待 Kdump。它不能保证在所有故障中成功。
+Kdump 不能保证在所有故障中成功。重点分析 CPU 无法继续执行、严重内存损坏、IOMMU/DMA 继续破坏内存、多 CPU 停止失败、捕获内核缺驱动、存储不可用、捕获内核自身启动失败，以及 firmware/BMC/hardware reset 先于 crash kexec 等情况。
 
-常见限制：
-
-- CPU 已无法继续执行指令；
-- 严重内存损坏破坏了 Kexec 映像或保留区；
-- IOMMU 或设备仍在 DMA，继续破坏内存；
-- 多 CPU 停止失败；
-- 捕获内核缺少必要驱动；
-- 存储目标不可用；
-- 捕获内核自身启动失败；
-- 固件、BMC 或硬件复位先于 crash kexec 发生。
-
-因此，Kdump 应与串口日志、pstore、BMC 事件日志、硬件 watchdog 和远程日志配合使用。
+Kdump 应与 serial console、pstore、BMC event log、hardware watchdog 和 remote logging 配合使用，而不是被视为唯一崩溃取证手段。
 
 ---
 
-# 第四部分：实验安排
+# 实验主线
 
-## 实验 1：观察正常 x86_64 启动
+课程实验按故障链分层，而不是按工具堆叠：
 
-- 保存完整 `dmesg`；
-- 标记内核解压、内存发现、SMP、调度器、时钟和驱动初始化阶段；
-- 将启动日志与 `start_kernel()` 初始化顺序对应起来。
+1. **正常启动**：保存完整 `dmesg`，把可观察事件与 B00–B05 的阶段边界对应起来；
+2. **普通 Kexec**：加载第二个测试内核，比较 normal reboot 与 Kexec 的入口状态和日志；
+3. **双内核 Kdump**：配置 `crashkernel=`、构建捕获内核 initramfs、加载 crash kernel；
+4. **受控 panic**：只在隔离测试环境中触发 panic，观察生产内核 → crash kexec → 捕获内核；
+5. **vmcore 分析**：使用匹配符号分析 panic CPU、task、stack、registers、faulting RIP 和相关对象；
+6. **失败注入**：验证预留不足、驱动缺失、符号不匹配、存储空间不足等问题，并判断失败发生在哪个阶段。
 
-## 实验 2：普通 Kexec 切换
-
-- 加载第二个测试内核；
-- 检查待启动映像；
-- 执行 Kexec；
-- 对比普通重启与 Kexec 的日志和耗时；
-- 验证新内核命令行和 initramfs。
-
-## 实验 3：配置双内核 Kdump
-
-- 配置 `crashkernel=`；
-- 检查保留内存；
-- 构建捕获内核 initramfs；
-- 加载 crash kernel；
-- 检查服务状态和加载结果。
-
-## 实验 4：受控触发 panic
-
-在隔离的测试环境中：
-
-- 使用 SysRq 或测试模块触发 panic；
-- 观察生产内核进入 crash kexec；
-- 确认捕获内核启动；
-- 保存 vmcore；
-- 记录失败时的控制台和串口日志。
-
-## 实验 5：分析 vmcore
-
-- 使用匹配的 `vmlinux` 打开 vmcore；
-- 查看 panic CPU、当前任务、调用栈和寄存器；
-- 反汇编故障 RIP 附近代码；
-- 查看故障对象；
-- 输出一份包含证据链的分析报告。
-
-## 实验 6：模拟常见失败
-
-可选择验证：
-
-- crashkernel 预留不足；
-- 捕获内核缺少存储驱动；
-- vmlinux 与 vmcore 不匹配；
-- 模块调试符号缺失；
-- 保存目录空间不足。
-
-实验重点是学会判断故障发生在：
+故障定位统一使用下面的阶段模型：
 
 ```text
-预留阶段
-加载阶段
-panic 切换阶段
-捕获内核启动阶段
-vmcore 导出阶段
-持久化保存阶段
-离线分析阶段
+reservation
+→ image loading
+→ panic / crash switch
+→ capture-kernel boot
+→ vmcore export
+→ persistent storage
+→ offline analysis
 ```
 
 ---
 
 # 与其他课程的关系
 
-```text
-assembly
-理解早期入口、寄存器、页表切换、异常和 Kexec 跳转代码。
+- [`assembly/`](../assembly/)：完整解释早期入口、寄存器、栈、控制寄存器、异常入口和 Kexec 跳转所需的机器执行基础；
+- [`memory/`](../memory/)：完整解释页表、memblock、物理页分配，以及 crashkernel 保留区和 vmcore 内存映射所依赖的内存机制；
+- [`scheduler/`](../scheduler/)：解释任务、CPU、调度和上下文切换，帮助理解 panic 后为何不能再假设正常调度环境；
+- [`timekeeping/`](../timekeeping/)：解释 watchdog、lockup detection 和崩溃时间线所依赖的时间机制；
+- [`integrated-paths/`](../integrated-paths/)：最终把正常启动和 panic→vmcore 路径与其他基础子系统串联起来。
 
-memory
-理解 crashkernel 保留区、物理内存、页表和 vmcore 内存映射。
-
-scheduler
-理解 panic 时其他 CPU 和任务为何不能再按正常调度路径处理。
-
-timekeeping
-理解 watchdog、lockup 检测和崩溃时间线。
-
-network
-理解通过网络保存 vmcore，以及分析网络故障现场。
-
-integrated-paths
-从 panic 一直跟踪到 vmcore 根因分析。
-```
+本阶段不展开网络协议栈。通过网络保存 vmcore 时，只说明当前实验所需的存储通道，不在本目录重复网络机制。
 
 # 建议学习顺序
 
-在进入本目录前，建议先掌握：
-
-1. 汇编课程中的寄存器、取址、栈和控制流；
-2. 内存课程中的物理内存、页表和 memblock；
-3. 调度课程中的任务、CPU 和上下文切换基础。
-
-之后按照下面的顺序学习：
+进入本目录前，应先掌握 assembly 中的寄存器、取址、栈、ABI 和控制流；正常启动 B00–B05 与 memory 中的早期页表、内存布局和 memblock 可以交叉学习。之后按以下顺序推进：
 
 ```text
 B00～B05  x86_64 正常启动
