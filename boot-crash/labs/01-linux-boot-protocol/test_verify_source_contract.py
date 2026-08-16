@@ -74,7 +74,7 @@ class SourceContractTests(unittest.TestCase):
 
     def test_accepts_complete_contract(self) -> None:
         passed = self.run_tree()
-        self.assertEqual(len(passed), 10)
+        self.assertEqual(len(passed), 11)
 
     def test_rejects_wrong_protocol_version(self) -> None:
         self.assert_rejected({"arch/x86/boot/header.S": HEADER.replace("0x020f", "0x020e")})
