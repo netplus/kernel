@@ -190,11 +190,11 @@ CPU execution mode 必须由实际控制寄存器、segment state 和控制流�
 - setup `main()` 的源码顺序；
 - command line/initrd/E820 字段的接口形式。
 
-不能据此证明某个实际 bzImage 的最终 build-time 字节，也不能证明某次 boot-loader 运行采用了哪条 capability 路径。
+`verify_source_contract.py` 属于这一层。它把关键源码事实转换成可重复执行的 source-contract 检查，但 source checker 通过仍不能代替编译后的布局或真实启动现场。
 
-### L2：真实 Linux 5.10 bzImage
+### L2：真实 Linux 5.10 构建产物
 
-应至少记录：
+这一层包括实际编译得到的 `sizeof` / `offsetof` 结果，以及真实 bzImage。对 bzImage 至少应记录：
 
 ```text
 bzImage SHA256
@@ -204,7 +204,7 @@ setup_sects
 loadflags/xloadflags
 ```
 
-L2 能证明构建产物实际携带什么 header 值，但仍不能证明 loader 在一次具体启动中的 placement 和输入。
+L2 能证明编译布局和构建产物实际携带什么 header 值，但仍不能证明 loader 在一次具体启动中的 placement 和输入。
 
 ### L3：运行现场
 
@@ -218,6 +218,10 @@ initrd physical address/size
 ```
 
 L1/L2 通过不能写成 L3 已验证。
+
+### checker fixture self-test 不属于 Linux 事实证据
+
+`test_verify_source_contract.py` 验证的是 matcher 自身：完整 fixture 应被接受，已知破坏应被拒绝。它不能证明真实 Linux v5.10 tree、真实 bzImage 或真实启动现场满足这些条件，因此不提升 L1/L2/L3 中任何 Linux 事实的证据等级。
 
 ## 12. 常见误判的失败条件
 
@@ -237,12 +241,16 @@ L1/L2 通过不能写成 L3 已验证。
 
 - Linux 5.10 `Documentation/x86/boot.rst`、`header.S`、`main.c`、`bootparam.h` 的源码事实核验；
 - B01 正式教程；
-- 静态实验流程和本验收基线。
+- 静态实验流程和本验收基线；
+- `verify_source_contract.py` L1 source/layout checker；
+- `test_verify_source_contract.py` checker fixture self-test；
+- fixture self-test 已实际执行：1 个完整契约正例和 7 个负例全部通过，完整 fixture 返回 11 项 source-contract checks。
 
-当前维护环境尚未执行：
+尚未执行：
 
-- Linux v5.10 checkout 中的 UAPI `offsetof`/`sizeof` 编译运行；
+- checker 对真实 Linux v5.10 checkout 的 CLI 运行；
+- Linux v5.10 UAPI 的实际 `sizeof` / `offsetof` 编译运行；
 - 真实 v5.10 bzImage header bytes 检查；
 - boot-loader/QEMU 运行时 zeropage、command line、initrd 位置观察。
 
-因此目前的结论属于 L1 源码事实与实验设计，不冒充 L2/L3 实测结果。下一步可把 L1 的 header/layout/setup-order 条件转换成自动 source/layout checker，再在具备完整 v5.10 checkout 时执行。
+因此当前证据状态应准确表述为：Linux 5.10 源码事实已经人工核验，checker 自身的 fixture 接受/拒绝逻辑已经实际执行；但 checker 尚未在真实 v5.10 checkout 上运行，L2 构建产物和 L3 运行现场也尚未实测。不能把 fixture self-test 写成真实 Linux 源码树通过 checker，更不能据此声称 bzImage 或运行时状态已经验证。
