@@ -27,9 +27,57 @@ arch/x86/boot/tools/build.c
 
 不要使用当前 master 的字段反推 5.10。
 
-## 3. 验证 `HdrS` 与 protocol 2.15
+## 3. 先验证自动 checker 自身
 
-先从源码定位协议签名和版本：
+实验目录提供：
+
+```text
+verify_source_contract.py
+test_verify_source_contract.py
+```
+
+在运行 checker 检查真实源码树之前，先运行 fixture self-test：
+
+```bash
+cd boot-crash/labs/01-linux-boot-protocol
+python3 -m unittest -v test_verify_source_contract.py
+```
+
+测试包含一个完整契约正例，以及 protocol version、`HdrS`、单个 ABI offset、E820 capacity、4 KiB 大小约束、header copy 和 setup `main()` 顺序等负例。其目的不是验证 Linux，而是验证 matcher 本身能够接受预期输入并拒绝这些已知破坏。
+
+当前维护记录：该组 fixture 已实际执行，1 个正例和 7 个负例全部通过；checker 对完整 fixture 返回 11 项 source-contract checks。这个结果只证明 checker 自身的接受/拒绝逻辑，不能写成“真实 Linux v5.10 源码树已经通过检查”。
+
+## 4. 对真实 Linux 5.10 tree 执行 L1 source-contract 检查
+
+具备 Linux v5.10 checkout 后执行：
+
+```bash
+python3 verify_source_contract.py /path/to/linux-5.10
+```
+
+checker 自动核验：
+
+```text
+header.S: HdrS
+header.S: protocol 0x020f
+boot_params.e820_entries source offset 0x1e8
+boot_params.sentinel source offset 0x1ef
+boot_params.hdr source offset 0x1f1
+boot_params.e820_table source offset 0x2d0
+boot_params embeds struct setup_header hdr
+E820_MAX_ENTRIES_ZEROPAGE == 128
+BUILD_BUG_ON(sizeof(boot_params) != 4096)
+copy_boot_params() copies hdr into boot_params.hdr
+setup main preserves copy/CPU/BIOS/memory/video/protected-mode order
+```
+
+这是 **L1 source/UAPI checker**。其中 offset 检查依赖 Linux v5.10 UAPI 源码中的显式 offset 注释；后面的实际 `offsetof()` 编译验证属于更强的结构布局证据。
+
+当前维护环境没有可执行 Linux v5.10 checkout，因此本项尚未在真实源码树上运行，不把 fixture self-test 冒充为本项结果。
+
+## 5. 人工核对 `HdrS` 与 protocol 2.15
+
+自动检查之后仍应阅读上下文：
 
 ```bash
 git grep -n 'HdrS' v5.10 -- arch/x86/boot/header.S Documentation/x86/boot.rst
@@ -40,7 +88,7 @@ git grep -n '0x020f' v5.10 -- arch/x86/boot/header.S
 
 这里验证的是 **kernel image 暴露给 loader 的协议版本**，不是 Linux 版本号，也不是 `boot_params` 自身的版本号。
 
-## 4. 验证 `boot_params` 的 4 KiB 契约
+## 6. 验证 `boot_params` 的 4 KiB 契约
 
 阅读：
 
@@ -67,7 +115,7 @@ boot_params.hdr offset == 0x1f1
 
 注意：`BUILD_BUG_ON` 是 Linux 5.10 setup 代码对结构大小的编译期约束；不能因为看到 `struct setup_header` 也出现在 `bootparam.h` 中，就把两个结构当成同一个对象。
 
-## 5. 用一个小程序验证 UAPI 布局
+## 7. 用一个小程序验证 UAPI 布局
 
 如果本地有 Linux 5.10 源码树，可以建立临时程序 `check_layout.c`：
 
@@ -107,7 +155,7 @@ offsetof(e820_table)   = 0x2d0
 
 这些是结构布局验收值，不是运行时物理地址。
 
-## 6. 验证 command line 与 initrd 的元数据模型
+## 8. 验证 command line 与 initrd 的元数据模型
 
 在 `struct setup_header` / `struct boot_params` 中定位：
 
@@ -133,7 +181,7 @@ setup_header / boot_params
 
 不要把 `cmd_line_ptr` 解释为 C 字符数组，也不要把 `ramdisk_image` 解释为 initrd 内容本身。
 
-## 7. 验证 setup `main()` 的阶段顺序
+## 9. 验证 setup `main()` 的阶段顺序
 
 从 Linux 5.10 `arch/x86/boot/main.c` 读取 `main()`，记录下面几个事件的源码顺序：
 
@@ -161,7 +209,7 @@ go_to_protected_mode()
 
 因此 `boot_params` 是跨阶段逐步形成的参数块，而不是 loader 一次性填写后 setup 完全只读的对象。
 
-## 8. 可选：从真实 bzImage 验证 header
+## 10. 可选：从真实 bzImage 验证 header
 
 如果已经构建 Linux 5.10 x86 `arch/x86/boot/bzImage`，可进一步检查实际映像，而不只检查源码。
 
@@ -179,44 +227,51 @@ loadflags/xloadflags
 
 真实映像验证能够证明“构建产物确实携带这些字段”，但仍不能证明某个 boot loader 在一次具体启动中实际采用了哪种 placement/capability 路径。
 
-## 9. 证据等级
+## 11. 证据等级
 
 本实验把证据分为三层：
 
 ```text
 L1 源码/UAPI 证据
 header.S、bootparam.h、main.c 中的定义和顺序。
+自动 source-contract checker 属于这一层。
 
 L2 构建产物证据
-真实 Linux 5.10 bzImage 中的 header bytes、最终 build-time 填充值。
+实际编译得到的结构布局结果，以及真实 Linux 5.10 bzImage 中的 header bytes、最终 build-time 填充值。
 
 L3 运行时证据
 boot loader 实际选择的装载地址、command line/initrd 位置、传入 zeropage 内容。
 ```
 
-L1 通过不能写成 L2/L3 已验证。某个 capability bit 存在，也不能推出本次启动一定使用对应能力。
+fixture self-test 是对**验证工具自身**的测试，不提升 Linux 事实的证据等级。L1 通过也不能写成 L2/L3 已验证。某个 capability bit 存在，同样不能推出本次启动一定使用对应能力。
 
-## 10. 结果记录模板
+## 12. 结果记录模板
 
 ```text
 Linux source/tag:
 compiler/toolchain:
 
-[源码]
+[checker self-test]
+command:
+result:
+
+[L1 源码]
+source checker command/result:
 HdrS:
 version:
-sizeof boot_params:
-hdr offset:
-e820_entries offset:
-sentinel offset:
-e820_table offset:
+sizeof boot_params source contract:
+hdr source offset:
+e820_entries source offset:
+sentinel source offset:
+e820_table source offset:
 setup main order:
 
-[构建产物，可选]
+[L2 构建产物，可选]
+compiled sizeof/offsetof result:
 bzImage SHA256:
 header bytes/offset:
 
-[运行时，可选]
+[L3 运行时，可选]
 boot loader:
 boot_params physical address:
 command line physical address:
@@ -225,8 +280,20 @@ initrd physical address/size:
 未执行项及原因:
 ```
 
-## 11. 当前环境状态
+## 13. 当前验证状态
 
-本实验说明依据已经完成的 Linux 5.10 source-path 核验编写。当前维护环境没有可执行的 Linux v5.10 checkout/完整 kernel build tree，因此本次没有伪造 `headers_install`、C `offsetof` 程序、bzImage 十六进制或 boot-loader 运行结果。
+已经完成：
 
-下一步应补 `expected-analysis.md`，把上述 ABI offset、setup 顺序、证据等级以及常见误判固定为独立验收基线。
+- Linux 5.10 source-path 事实核验；
+- `expected-analysis.md` 验收基线；
+- `verify_source_contract.py` L1 checker；
+- checker fixture self-test：1 个正例 + 7 个负例实际执行通过，完整 fixture 返回 11 项检查。
+
+尚未执行：
+
+- checker 对真实 Linux v5.10 checkout 的 CLI 运行；
+- 实际编译的 `sizeof` / `offsetof` 布局验证；
+- 真实 bzImage header bytes 检查；
+- boot-loader/QEMU 运行现场的 zeropage、command line 和 initrd 地址观察。
+
+这些未执行项需要真实 Linux v5.10 source/build/boot 环境。它们属于更强的增强证据，不影响当前文档区分源码事实与动态事实，但不得在结果记录中写成已实测。
