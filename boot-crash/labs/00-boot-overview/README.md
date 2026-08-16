@@ -11,7 +11,8 @@ B00 的核心不是记住一条很长的函数名列表，而是学会判断一�
 3. `extract_kernel()` 属于 compressed kernel 解压器；
 4. `x86_64_start_kernel()` 属于正式内核的 x86-64 早期 C 入口；
 5. `start_kernel()`、`rest_init()`、`kernel_init()` 位于 `init/main.c`，但承担不同阶段的责任；
-6. 源码中的“下一阶段”不一定表现为普通 C ABI `call`。
+6. PID 1 的创建与最终 `exec` 用户态 init 是两个不同边界；
+7. 源码中的“下一阶段”不一定表现为普通 C ABI `call`。
 
 本实验只验证 B00 的**阶段归属和交接点**。boot protocol 字段留给 B01，compressed kernel 内部细节留给 B02，正式内核早期页表留给 B03。
 
@@ -27,6 +28,7 @@ git -C /path/to/linux describe --tags --exact-match HEAD
 工具：
 
 ```text
+python3
 grep / git grep
 nm
 readelf
@@ -36,7 +38,69 @@ file
 
 符号工具需要实际构建产物。没有构建环境时仍可完成源码定位，但必须把“源码已确认”和“ELF/反汇编已确认”分开记录。
 
-## 3. 第一层：源码定位
+## 3. 第一层：自动源码归属检查
+
+实验目录提供：
+
+```text
+verify_source_ownership.py
+    对真实 Linux 5.10 源码树检查 B00 的 source-level ownership contract。
+
+test_verify_source_ownership.py
+    用正/负 fixture 检查 matcher 自身是否会错误接受缺失的阶段边界。
+```
+
+先验证 checker 自身：
+
+```bash
+cd boot-crash/labs/00-boot-overview
+python3 -m unittest -v test_verify_source_ownership.py
+```
+
+当前测试覆盖：
+
+- 完整契约应通过；
+- setup `main()` 缺失应失败；
+- compressed 与 formal 两个 `startup_64` 分别缺失时都应失败；
+- `extract_kernel()` 缺失应失败；
+- `x86_64_start_reservations()` 等架构 C 交接缺失应失败；
+- `kernel_thread(kernel_init, ...)` 缺失应失败；
+- `run_init_process()` exec 边界缺失应失败。
+
+checker 自测试通过后，再对真实 v5.10 源码树运行：
+
+```bash
+python3 verify_source_ownership.py /path/to/linux-5.10
+```
+
+它检查以下源码归属：
+
+```text
+arch/x86/boot/main.c                         main()
+arch/x86/boot/compressed/head_64.S          compressed startup_64
+arch/x86/boot/compressed/misc.c             extract_kernel()
+arch/x86/kernel/head_64.S                   formal-kernel startup_64
+arch/x86/kernel/head64.c                    x86_64_start_kernel()
+                                             x86_64_start_reservations()
+init/main.c                                 start_kernel()
+                                             rest_init()
+                                             kernel_init()
+                                             kernel_thread(kernel_init, ...)
+                                             run_init_process()
+```
+
+### 自动检查的证据边界
+
+`verify_source_ownership.py` 只证明**指定名字/关系存在于指定源码文件**。它不能证明：
+
+- 某个符号一定保留在最终 ELF symbol table；
+- 两个 `startup_64` 的运行时地址关系；
+- CPU 实际已经执行过这些入口；
+- 启动阶段之间所有控制转移都已经通过机器码验证。
+
+因此 source checker 通过之后，仍要继续做下面的人工上下文阅读；具备构建产物时还要做 ELF/反汇编取证。
+
+## 4. 第二层：人工源码定位与上下文阅读
 
 在 Linux v5.10 源码根目录执行：
 
@@ -73,7 +137,7 @@ git grep -n 'kernel_init' -- init/main.c
 
 最低验收标准是同时给出**文件路径 + 所属映像**。只写“先进入 startup_64，再进入 startup_64”不合格。
 
-## 4. 第二层：检查 compressed kernel 的交接方式
+## 5. 第三层：检查 compressed kernel 的交接方式
 
 在 `arch/x86/boot/compressed/head_64.S` 中围绕 `extract_kernel` 阅读上下文：
 
@@ -101,7 +165,7 @@ call extract_kernel
 
 是两个不同性质的控制流事件。前者可以是普通函数调用；后者是启动阶段交接，不能在 B00 图中一律画成 C 调用链。
 
-## 5. 第三层：检查正式内核 C 入口链
+## 6. 第四层：检查正式内核 C 入口链
 
 阅读：
 
@@ -125,7 +189,7 @@ start_kernel()
 
 验收时必须说明：`x86_64_start_kernel()` 与 `start_kernel()` 不是同一层次的两个名字；前者仍属于 x86 架构早期初始化，后者进入通用初始化。
 
-## 6. 第四层：检查 PID 1 与用户态 init 的边界
+## 7. 第五层：检查 PID 1 与用户态 init 的边界
 
 在 `init/main.c` 中阅读 `rest_init()` 与 `kernel_init()`：
 
@@ -142,7 +206,7 @@ git grep -n -C 20 'run_init_process' -- init/main.c
 
 硬验收条件：不能把“`kernel_thread(kernel_init, ...)` 已创建 PID 1”写成“`/sbin/init` 已经开始执行”。
 
-## 7. 第五层：有构建产物时检查符号属于哪个 ELF
+## 8. 第六层：有构建产物时检查符号属于哪个 ELF
 
 Linux x86 `bzImage` 的不同阶段并不全部位于同一个 ELF 中。若本地已经构建 v5.10，可先定位实际产物：
 
@@ -171,7 +235,7 @@ objdump -dr <ELF>
 
 compressed `startup_64` 与 formal-kernel `startup_64` 位于不同映像/ELF 语境。即使两边都能通过 `nm` 找到，也不能把它们当成同一符号表里的两个阶段标签来解释。
 
-## 8. 建议的反汇编观察
+## 9. 建议的反汇编观察
 
 有真实构建产物时：
 
@@ -193,14 +257,18 @@ grep -n -A20 -B10 '<start_kernel>:' kernel.dis
 
 本实验不要求从一次静态反汇编证明完整运行时启动顺序。真实控制流还受链接地址、重定位、启动协议和配置影响。
 
-## 9. 结果记录模板
+## 10. 结果记录模板
 
 ```text
 Kernel source/tag:
 Kernel config:
 Build completed: yes/no
 
+[Checker self-test]
+python3 -m unittest -v test_verify_source_ownership.py:
+
 [Source ownership]
+verify_source_ownership.py result:
 setup main:
 compressed startup_64:
 extract_kernel:
@@ -227,20 +295,24 @@ exec init boundary:
 ...
 ```
 
-## 10. 通过标准
+## 11. 通过标准
 
 本实验通过至少要求：
 
-- 源码层面准确定位八个入口/函数及其阶段；
+- checker fixture self-test 通过后，才把 checker 用于真实源码树；
+- 源码层面准确定位八个主要入口/函数及其阶段，并核验 `x86_64_start_reservations()`、PID 1 创建和 exec 边界；
 - 明确区分两个 `startup_64` 的映像归属；
 - 明确 `extract_kernel()` 调用与跳到正式内核入口不是同一种交接；
 - 明确 `x86_64_start_kernel()` 与 `start_kernel()` 的架构/通用初始化边界；
 - 明确 PID 1 创建与 exec 用户态 init 的时间边界；
+- 若有真实 v5.10 源码树，实际执行 `verify_source_ownership.py` 并记录结果；
 - 若有构建产物，实际执行 `nm/readelf/objdump` 并记录输入 ELF；
-- 若没有构建产物，明确写出哪些结论只有源码证据，不把预期反汇编写成实测。
+- 若没有源码树或构建产物，明确写出证据等级，不把 fixture、预期反汇编或源码模式匹配写成运行时实测。
 
-## 11. 当前环境状态
+## 12. 当前环境状态
 
-本实验 README 本次已按 Linux 5.10 的既有 source-path 核验结果设计并提交。当前维护环境没有可执行的 Linux v5.10 checkout/构建产物，因此没有填写 `nm`、`readelf` 或 `objdump` 的虚构结果。
+B00 的 checker fixture self-test 已实际执行：8 个测试全部通过，进程退出码为 0。该结果证明当前 matcher 的正/负 fixture 接受/拒绝逻辑已经运行过。
 
-下一步应补充 `expected-analysis.md`，把源码归属、ELF 边界和 PID 1/exec 边界固定成独立验收基线；具备真实 v5.10 构建环境后，再补机器码级实际记录。
+当前维护环境没有完整 Linux v5.10 checkout/构建产物，因此 `verify_source_ownership.py /path/to/linux-5.10`、`nm/readelf/objdump` 和运行时启动现场仍未执行。它们属于更高一层证据，不能由 fixture self-test 替代。
+
+对应的独立验收基线见 [`expected-analysis.md`](expected-analysis.md)。
