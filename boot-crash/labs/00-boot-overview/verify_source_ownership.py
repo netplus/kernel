@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Verify B00 boot-stage source ownership against a Linux 5.10 tree.
 
-This checker intentionally proves source-level ownership and ordering only.  It
-must not be used as evidence for ELF symbol visibility or runtime execution.
+This checker intentionally proves source-level ownership only. It must not be
+used as evidence for ELF symbol visibility or runtime execution.
 
 Usage:
     python3 verify_source_ownership.py /path/to/linux-5.10
@@ -34,12 +34,12 @@ def require(text: str, pattern: str, label: str) -> None:
     print(f"PASS: {label}")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("kernel", type=Path, help="Linux 5.10 source tree")
-    args = parser.parse_args()
-    root = args.kernel
+def check(root: Path) -> None:
+    """Check the B00 source-ownership contract under *root*.
 
+    Keeping the contract separate from CLI parsing lets the fixture tests call
+    exactly the same matcher used for a real Linux 5.10 source tree.
+    """
     setup = read(root, "arch/x86/boot/main.c")
     compressed_head = read(root, "arch/x86/boot/compressed/head_64.S")
     compressed_misc = read(root, "arch/x86/boot/compressed/misc.c")
@@ -70,7 +70,14 @@ def main() -> int:
     require(init_main, r"\brun_init_process\s*\(",
             "run_init_process() exists for later exec boundary")
 
-    # The two startup_64 checks deliberately read different files.  Their
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("kernel", type=Path, help="Linux 5.10 source tree")
+    args = parser.parse_args()
+    check(args.kernel)
+
+    # The two startup_64 checks deliberately read different files. Their
     # success demonstrates two source ownership contexts; it does not compare
     # addresses or claim that both symbols are visible in one ELF.
     print("PASS: B00 source ownership contract")
