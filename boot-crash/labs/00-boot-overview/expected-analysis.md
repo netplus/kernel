@@ -192,6 +192,16 @@ B00 实验完成时，应能逐项回答：
 
 ## 9. 当前验证状态
 
-本验收基线根据仓库已有的 Linux 5.10 source-path 核验和 B00 实验设计整理。当前维护环境没有可执行的 Linux v5.10 checkout 和对应构建产物，因此本次没有执行 `nm`、`readelf`、`objdump` 或 QEMU/GDB，也没有填写任何虚构输出。
+B00 的 Linux 5.10 source-path、正文、实验流程和本验收基线已经形成一致的阶段模型。实验目录中的 `verify_source_ownership.py` 已配套 `test_verify_source_ownership.py`；fixture self-test 已实际执行，**8 个测试全部通过，进程退出码为 0**。这些测试验证 matcher 能接受完整契约，并能拒绝 setup `main()`、两个独立 `startup_64`、`extract_kernel()`、架构 C 交接、PID 1 创建边界或 `run_init_process()` exec 边界缺失等负例。
 
-当前已达到的证据等级是：**源码事实核验 + 实验验收标准固定**。真实 ELF/机器码和运行时验证留待具备对应环境后补充。
+这一级结果证明的是 **checker 自身的 source-contract 接受/拒绝逻辑已经实际运行**，不能提升为真实 Linux v5.10 源码树、ELF/机器码或运行时启动路径已经实测。
+
+当前维护环境仍没有完整 Linux v5.10 checkout 和对应构建产物，因此尚未执行：
+
+```text
+verify_source_ownership.py /path/to/linux-5.10
+nm/readelf/objdump 对 compressed vmlinux 与正式 vmlinux 的验证
+QEMU/GDB 运行时启动观察
+```
+
+因此当前证据等级应准确写为：**Linux 5.10 源码事实核验 + 已实际执行的 checker fixture self-test + 实验验收标准固定**。真实源码树 checker、ELF/机器码和运行时验证继续作为后续环境具备时的增强证据，不把它们伪写为已完成。
