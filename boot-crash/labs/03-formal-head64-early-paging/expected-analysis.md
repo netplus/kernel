@@ -6,13 +6,14 @@
 
 B03 只讨论 formal kernel 入口阶段的页表和执行环境交接。完整多级页表机制属于 `memory/`；long-mode transition、GDT、CR0/CR3/CR4 指令语义属于 `assembly/`。
 
-实验按三层证据解释：
+实验按四类证据解释：
 
-- **L1 源码事实**：证明 Linux 5.10 中符号、公式、静态对象、源码顺序和 CONFIG 条件；
-- **L2 ELF/机器码**：证明本次实际构建中的符号地址和机器指令顺序；
-- **L3 运行现场**：证明某次启动时寄存器、CR3、RIP、RSP、GDTR 和 far-return frame 的实际值。
+- **工具证据**：`test_verify_source_contract.py` 的 fixture self-test，只证明 checker 能接受完整 fixture、拒绝已知破坏；
+- **L1 源码事实**：真实 Linux 5.10 checkout 上的符号、公式、静态对象、源码顺序和 CONFIG 条件；
+- **L2 ELF/机器码**：本次实际构建中的符号地址和机器指令顺序；
+- **L3 运行现场**：某次启动时寄存器、CR3、RIP、RSP、GDTR 和 far-return frame 的实际值。
 
-L1 不能冒充 L2/L3。当前没有真实 Linux 5.10 build/QEMU 数据时，动态数值必须保持“未执行”。
+工具 self-test 不能冒充 Linux 事实证据，L1 也不能冒充 L2/L3。当前没有真实 Linux 5.10 build/QEMU 数据时，动态数值必须保持“未执行”。
 
 ## 2. formal `startup_64` 的入口状态
 
@@ -41,41 +42,21 @@ CS.L = 1, CS.D = 0
 load_delta = physaddr - (_text - __START_KERNEL_map)
 ```
 
-它比较的是：
-
-```text
-本次实际 kernel physical load
-        vs
-由 link-time virtual layout 推导的默认 physical position
-```
-
-Linux 5.10 formal early mapping 要求该差值满足 PMD 对齐约束。`load_delta` 不是 KASLR 随机数，也不是虚拟地址与物理地址的一般转换公式。
+它比较的是本次实际 kernel physical load 与由 link-time virtual layout 推导的默认 physical position。Linux 5.10 formal early mapping 要求该差值满足 PMD 对齐约束。`load_delta` 不是 KASLR 随机数，也不是虚拟地址与物理地址的一般转换公式。
 
 ## 4. 三个 early paging 对象的职责
 
-### `early_top_pgt`
+`early_top_pgt` 是 BSP formal entry 在切换阶段使用的 top-level page table；`__startup_64()` 会按本次实际装载位置修正其相关引用和 kernel mapping。
 
-BSP formal entry 在切换阶段使用的 top-level page table。`__startup_64()` 会按本次实际装载位置修正其相关引用和 kernel mapping。
+`early_dynamic_pgts` 为 switchover identity mapping 提供临时页表页。其目的不是建立最终 Linux 地址空间，而是保证装入新 CR3 后、RIP 尚未切换到完整 kernel virtual address 的短暂阶段仍可执行。
 
-### `early_dynamic_pgts`
-
-为 switchover identity mapping 提供临时页表页。其目的不是建立最终 Linux 地址空间，而是保证装入新 CR3 后、RIP 尚未切换到完整 kernel virtual address 的短暂阶段仍可执行。
-
-### `phys_base`
-
-记录本次 kernel image 的实际物理基址状态。启用 SME 时，必须区分真实物理基址与带 encryption modifier 的页表/CR3 地址值。
+`phys_base` 记录本次 kernel image 的实际物理基址状态。启用 SME 时，必须区分真实物理基址与带 encryption modifier 的页表/CR3 地址值。
 
 若把三者统一描述为“页表地址”，实验不通过。
 
 ## 5. `__startup_64()` 的返回值与 CR3 必须分开
 
-Linux 5.10 `__startup_64()` 最终返回：
-
-```text
-sme_get_me_mask()
-```
-
-因此 `call __startup_64` 刚返回时 `%rax` 的 C 语义是 **SME modifier**，不是 CR3。
+Linux 5.10 `__startup_64()` 最终返回 `sme_get_me_mask()`。因此 `call __startup_64` 刚返回时 `%rax` 的 C 语义是 **SME modifier**，不是 CR3。
 
 assembly 随后才形成 CR3：
 
@@ -101,42 +82,17 @@ movq $1f, %rax
 jmp *%rax
 ```
 
-语义分别是：
-
-1. `mov %cr3`：新的 translation context 生效；
-2. indirect jump：后续 RIP 明确进入 formal kernel 的完整虚拟地址语境。
-
-因此 P2 应至少有两个观察时刻。不能写成“加载 CR3 自动把 RIP 改成高半区地址”。
-
-switchover identity mapping 正是为了保证这两个动作之间的执行连续性。
+`mov %cr3` 使新的 translation context 生效；随后的 indirect jump 才让后续 RIP 明确进入 formal kernel 的完整虚拟地址语境。因此 P2 应至少有两个观察时刻，不能写成“加载 CR3 自动把 RIP 改成高半区地址”。switchover identity mapping 正是为了保证这两个动作之间的执行连续性。
 
 ## 7. 地址语境稳定后仍需建立普通 C 所需环境
 
-virtual-address jump 后仍应看到以下类别的状态建立：
+virtual-address jump 后仍应看到 kernel-space GDT、segment selector cleanup、MSR_GS_BASE、`initial_stack → RSP`、early IDT、EFER.SCE/条件性的 NX、CR0 startup state、`pushq $0; popfq` 和 `%rsi → %rdi` 等状态建立。
 
-```text
-kernel-space GDT
-segment selector cleanup
-MSR_GS_BASE
-initial_stack → RSP
-early IDT
-EFER.SCE / 条件性的 NX
-CR0 startup state
-pushq $0; popfq
-%rsi → %rdi
-```
-
-这里 `pushq $0; popfq` 的验收语义是清理 RFLAGS，并且发生在新的 kernel stack 已经可用之后；不能只把它当作普通 push/pop 示例。
+其中 `pushq $0; popfq` 的验收语义是清理 RFLAGS，并且发生在新的 kernel stack 已经可用之后；不能只把它当作普通 push/pop 示例。
 
 ## 8. `initial_code` 与 far return
 
-Linux 5.10 formal head 中：
-
-```text
-initial_code = x86_64_start_kernel
-```
-
-最终 assembly 构造目标 CS/RIP 并执行 `lretq`。正确的交接结果应是：
+Linux 5.10 formal head 中 `initial_code = x86_64_start_kernel`。最终 assembly 构造目标 CS/RIP 并执行 `lretq`。正确交接结果应为：
 
 ```text
 CS  = __KERNEL_CS
@@ -149,37 +105,44 @@ P3 的 far-return frame 必须根据本次真实反汇编和断点位置读取�
 
 ## 9. BSP、secondary CPU 与特殊入口
 
-BSP 主线：
-
-```text
-startup_64
-→ __startup_64()
-→ early_top_pgt
-```
-
-secondary CPU 主线：
-
-```text
-secondary_startup_64
-→ __startup_secondary_64()
-→ init_top_pgt
-```
-
-两条路径会复用后续部分 assembly，但入口前提和 early page-table ownership 不相同。
+BSP 主线为 `startup_64 → __startup_64() → early_top_pgt`；secondary CPU 主线为 `secondary_startup_64 → __startup_secondary_64() → init_top_pgt`。两条路径会复用后续部分 assembly，但入口前提和 early page-table ownership 不相同。
 
 `secondary_startup_64_no_verify` 只能按 Linux 5.10 的 SEV-ES 特殊 secondary bring-up 条件解释，不能写成普通 AP 默认入口。
 
 ## 10. LA57 与 SME/SEV 条件
 
-### 5-level paging
-
 在 `CONFIG_X86_5LEVEL` 相关构建中，formal kernel 接管此前 decompression stage 已经决定的 LA57 状态。`check_la57_support()` 检查 CR4.LA57 并同步 early paging 参数；它不是第一次决定是否进入 5-level paging。
-
-### SME/SEV
 
 SME modifier 会参与 early page-table/CR3 地址形成。SEV-ES 还影响 secondary CPU 特殊入口。没有相应配置和硬件/虚拟化环境时，只能验证源码条件，不能宣称动态路径已经执行。
 
-## 11. L2 反汇编的最低验收顺序
+## 11. 自动 L1 checker 的验收范围
+
+本实验现已包含 `verify_source_contract.py`，将可静态判断的 Linux 5.10 实现事实固定为 6 组 source-contract：
+
+1. formal `startup_64` 的 64-bit/identity-map/`%rsi` 入口条件，以及 `verify_cpu → __startup_64 → early_top_pgt` 的 BSP 顺序；
+2. `load_delta`、PMD 对齐、`early_top_pgt`/`early_dynamic_pgts`、non-global switchover mapping、`phys_base` 和 SME-modifier return；
+3. `EARLY_DYNAMIC_PAGE_TABLES == 64`；
+4. `phys_base → sev_verify_cbit → CR3 write → virtual-address target/jump → GDT → stack → early IDT → RFLAGS → %rsi→%rdi → lretq`，以及 `initial_code == x86_64_start_kernel`；
+5. secondary CPU 的 `__startup_secondary_64 → init_top_pgt` ownership 与 SEV-ES no-verify 特例；
+6. LA57 是从 decompressor 阶段接管的状态，而不是在 formal entry 首次启用。
+
+checker 通过只能说明被匹配的 source contract 在目标 checkout 中成立；仍需阅读源码上下文确认条件分支和语义，也不能由此推导本次实际 ELF 或运行时寄存器值。
+
+## 12. checker fixture self-test 的验收范围
+
+`test_verify_source_contract.py` 已实际执行：**8 个 unittest 全部通过，exit code 0**。其中包括 1 个完整正例和 7 个负例；完整正例返回 6 组 source-contract。负例分别破坏：
+
+- formal-entry identity-map 契约；
+- `load_delta` 公式；
+- SME return；
+- CR3/virtual-target 顺序；
+- `initial_code == x86_64_start_kernel`；
+- AP 的 `init_top_pgt` ownership；
+- `EARLY_DYNAMIC_PAGE_TABLES` pool size。
+
+这项结果只验证 matcher 的 acceptance/rejection 行为。它不是“Linux v5.10 已通过 checker”的替代证据，也不提升 L1/L2/L3 的证据等级。
+
+## 13. L2 反汇编的最低验收顺序
 
 真实 `vmlinux` 上至少应确认：
 
@@ -201,25 +164,13 @@ startup_64
 
 具体指令编码、寄存器临时使用和宏展开必须以匹配 `.config`、compiler/binutils 的实际构建为准。
 
-## 12. L3 P0–P3 的预期结论
+## 14. L3 P0–P3 的预期结论
 
-### P0：formal `startup_64`
+P0 应证明已经处于 64-bit formal entry，并保存旧 CR3、`%rsi`、RSP、RFLAGS 等基线；P1 应在 `__startup_64()` 刚返回时观察 `%rax` 的 SME-modifier 语义，再逐指令观察 CR3 地址形成；P2 应分别记录 CR3 write 与 indirect jump 后的 RIP；P3 应记录真实 far-return frame、GDTR、RFLAGS、RSI/RDI，以及 `lretq` 后的 CS/RIP/RSP/RDI。
 
-应证明“已经在 64-bit formal entry”，并保存旧 CR3、`%rsi`、RSP、RFLAGS 等基线。源码不能替代这些动态值。
+源码不能替代这些动态值。
 
-### P1：`__startup_64()` 刚返回
-
-应观察 `%rax` 的 SME-modifier 语义；随后逐指令观察地址加法，直到形成将写入 CR3 的值。
-
-### P2：CR3 write 与 indirect jump
-
-应分别记录 CR3 和 RIP，证明页表根切换与地址语境跳转是两个时刻。
-
-### P3：`lretq` 前后
-
-应记录真实 far-return frame、GDTR、RFLAGS、RSI/RDI，以及执行后的 CS/RIP/RSP/RDI，证明最终进入 `x86_64_start_kernel()`。
-
-## 13. 常见错误判定
+## 15. 常见错误判定
 
 出现以下任一表述时应回到源码或实验重新核验：
 
@@ -233,14 +184,15 @@ startup_64
 8. 仅凭源码给出某次启动的 CR3、RIP、RSP、GDTR 或栈地址；
 9. 把 `arch/x86/mm/ident_map.c` 写成 Linux 5.10 BSP `startup_64 → __startup_64()` switchover mapping 的直接主调用链。
 
-## 14. 当前验证状态
+## 16. 当前验证状态
 
-当前课程材料已经完成 Linux 5.10 源码事实核验，并据此固定了 L1/L2/L3 实验设计和本验收基线。
+当前课程材料已完成 Linux 5.10 源码事实核验、B03 实验设计、expected-analysis、自动 L1 source-contract checker，以及 checker 的正/负 fixture self-test。self-test 已实际执行，8 个 unittest 全部通过（1 个完整正例 + 7 个负例，exit code 0），完整正例返回 6 组 source-contract。
 
-当前维护环境尚未提供可执行的 Linux v5.10 build tree 与 QEMU/GDB 启动现场，因此以下项目仍明确为未执行：
+当前维护环境尚未在真实 Linux v5.10 checkout 上运行 checker，也没有匹配的 formal `vmlinux` 与 QEMU/GDB 启动现场。因此以下项目仍明确为未执行增强证据：
 
+- 真实 Linux v5.10 checkout 上的 `verify_source_contract.py` CLI 记录；
 - 匹配配置的 formal `vmlinux` 上 `nm/readelf/objdump` 验证；
 - P0–P3 的 CR3、RIP、RSP、RFLAGS、GDTR、RSI/RDI 动态记录；
 - LA57、SME/SEV 条件路径的实际运行观察。
 
-下一步应先把本章可静态判断的 L1 条件转换成自动 source-contract checker，并用正/负 fixture 验证 matcher 本身；真实构建和动态实验在具备环境后补充。
+下一步是执行 B03 正文、source-path、实验与本验收基线的整章一致性复核。若未发现新的事实缺口，则生成 completion review；真实构建和动态实验在具备环境后作为增强证据补充。
