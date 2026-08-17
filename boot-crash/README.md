@@ -119,19 +119,39 @@ arch/x86/boot/compressed/kaslr.c
 
 GDT、控制寄存器、long-mode transition 等机器执行机制由 [`assembly/`](../assembly/) 完整解释；本领域关注这些状态在启动阶段之间如何交接。
 
-## B03：formal `head_64.S` 与早期页表
+## B03：formal `head_64.S` 与早期页表【已完成】
 
-主要内容：解压后的 64 位内核入口、内核虚拟地址与物理地址关系、正式内核早期地址空间调整、内核映像重定位、BSP/AP 入口边界，以及进入更完整内存管理初始化前必须具备的条件。
+本章解释 formal kernel 已经在 64-bit mode 且已有 identity mapping 时，为什么仍需要根据实际物理装载位置修正 early page tables、形成并切换 CR3，再显式转入 kernel virtual-address execution，最后建立进入 `x86_64_start_kernel()` 所需的机器状态。
+
+核心范围：
+
+- formal `startup_64` 的入口前提：64-bit mode、identity mapping、`%rsi` 中的 `boot_params` / `real_mode_data` 物理指针；
+- link-time high-half VA、默认 physical position、实际 `physaddr` 与 `load_delta` 的关系；
+- `early_top_pgt`、`early_dynamic_pgts`、`phys_base` 与 switchover identity mapping 的职责；
+- `__startup_64()` 返回 SME modifier，而 assembly 随后才形成实际 CR3；
+- `mov %cr3` 与 indirect virtual-address jump 是两个不同状态变化；
+- kernel GDT、`initial_stack`、early IDT、RFLAGS、`%rsi → %rdi` 与 `lretq → x86_64_start_kernel()`；
+- BSP `early_top_pgt` 与 secondary CPU `init_top_pgt` 的 ownership 边界，以及 LA57/SEV-ES 条件路径。
+
+已完成内容：
+
+- [正式教程：formal `head_64.S` 与早期页表](docs/03-formal-head64-and-early-paging.md)
+- [Linux 5.10 formal entry 与 early paging 源码事实核验](source-paths/03-formal-head64-early-paging-linux-5.10.md)
+- [实验：formal `head_64.S` 与 early paging 状态交接](labs/03-formal-head64-early-paging/)
+- [B03 收章复核](docs/03-b03-completion-review.md)
+
+实验已建立 6 组 L1 source-contract checker，并实际执行通过 8 个 unittest（1 个完整正例 + 7 个负例，exit code 0）。真实 Linux v5.10 checkout 上的 checker、匹配构建的 `vmlinux`/`nm`/`readelf`/`objdump` 和 QEMU/GDB P0–P3 动态现场仍属于增强证据，不冒充为已执行结果。
 
 建议源码：
 
 ```text
 arch/x86/kernel/head_64.S
 arch/x86/kernel/head64.c
-arch/x86/mm/ident_map.c
+arch/x86/include/asm/pgtable_64_types.h
+arch/x86/include/asm/page_64_types.h
 ```
 
-完整页表机制放在 [`memory/`](../memory/)；本章只讲启动所需的页表状态和交接点。
+Linux 5.10 BSP formal-entry 的 switchover identity mapping 直接在 `head64.c::__startup_64()` 中构造；`arch/x86/mm/ident_map.c` 不属于这条主调用链，因此不再把它列为 B03 主源码入口。完整页表机制放在 [`memory/`](../memory/)；本章只讲启动所需的页表状态和交接点。
 
 ## B04：从 `x86_64_start_kernel()` 到 `start_kernel()`
 
