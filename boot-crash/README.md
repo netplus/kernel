@@ -86,19 +86,32 @@ arch/x86/boot/main.c
 arch/x86/include/uapi/asm/bootparam.h
 ```
 
-## B02：压缩内核与早期 64 位环境
+## B02：压缩内核与早期 64 位环境【已完成】
 
-主要内容：
+本章把 compressed kernel 作为 formal kernel 之前的独立执行映像来理解，重点说明它如何接收 `boot_params`、选择 formal-kernel output、解压 payload、按 ELF `PT_LOAD` 形成布局、按配置处理 relocation，并最终把控制权交给 formal kernel。
 
-- compressed kernel 为什么需要独立启动环境；
-- 临时栈、CPU 能力检查和临时页表；
-- 内核解压；
-- KASLR 与物理装载位置；
-- 解压完成后如何把控制权交给正式内核。
+核心范围：
+
+- compressed `vmlinux` 与 formal `vmlinux` 是两个独立 ELF/链接上下文；
+- compressed PIE/freestanding 构建约束与 formal-kernel relocation 的职责边界；
+- `CONFIG_RELOCATABLE`、`CONFIG_RANDOMIZE_BASE`、`CONFIG_X86_NEED_RELOCS` 等配置条件；
+- `needed_size`、KASLR 合法候选与 `MEM_AVOID_*` 覆盖规避；
+- `choose_random_location() → __decompress() → parse_elf() → handle_relocations()` 的阶段语义；
+- `extract_kernel()` 的 C ABI return 与后续跨映像 handoff 是两个不同控制流事件。
+
+已完成内容：
+
+- [正式教程：压缩内核与早期 64 位环境](docs/02-compressed-kernel-and-early-64bit.md)
+- [Linux 5.10 compressed-kernel 源码事实核验](source-paths/02-compressed-kernel-linux-5.10.md)
+- [实验：compressed kernel 的构建、解压与 handoff](labs/02-compressed-kernel/)
+- [B02 收章复核](docs/02-b02-completion-review.md)
+
+实验已建立 L1 source/build contract checker，并实际执行通过 1 个完整正例和 7 个负例 fixture；完整正例覆盖 10 组 L1 contract。真实 Linux v5.10 checkout、compressed/formal ELF 的 `readelf/nm/objdump` 和 QEMU/GDB P0–P3 动态现场仍属于增强证据，不冒充为已执行结果。
 
 建议源码：
 
 ```text
+arch/x86/boot/compressed/Makefile
 arch/x86/boot/compressed/head_64.S
 arch/x86/boot/compressed/misc.c
 arch/x86/boot/compressed/kaslr.c
