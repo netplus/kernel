@@ -12,23 +12,25 @@
 4. memblock/early mapping 如何先于普通 page/slab/vmalloc allocator；
 5. scheduler、IRQ、tick/timer/timekeeping 与 `local_irq_enable()` 为什么具有明确顺序。
 
-验证分三层：
+验证分为四类证据：
 
 ```text
+工具证据：checker fixture self-test，只验证 matcher 自身能接受正确 fixture、拒绝错误 fixture
 L1：Linux v5.10 源码契约
 L2：匹配构建的 vmlinux / 符号 / 反汇编
 L3：QEMU/GDB 动态启动现场
 ```
 
-当前仓库已经完成 L1 源码事实核验；本实验先把可复核的 L1 检查步骤固定下来。当前执行环境没有匹配的 Linux v5.10 build tree/QEMU，因此 L2/L3 只定义操作与验收点，不填写虚构结果。
+工具证据不能替代 L1；L1 不能替代 L2/L3。当前仓库已经完成 Linux v5.10 source-level fact check，并建立自动 L1 checker。当前执行环境没有匹配的 Linux v5.10 build tree/QEMU，因此 L2/L3 只定义操作与验收点，不填写虚构结果。
 
-## 2. 环境
+## 2. 环境与推荐执行顺序
 
 推荐准备：
 
 ```text
 Linux kernel v5.10 源码树
 对应 .config 和完成构建的 vmlinux
+Python 3
 GNU grep / sed / awk
 nm / readelf / objdump
 GDB
@@ -49,6 +51,38 @@ git describe --tags --exact-match HEAD
 ```
 
 预期基线为 `v5.10`。
+
+建议按下面的顺序执行，避免把“checker 自己工作正常”误写成“Linux 5.10 已经被实际验证”：
+
+```bash
+cd boot-crash/labs/04-x86-start-kernel
+
+# 0. 工具自测试
+python3 -m unittest -v test_verify_source_contract.py
+
+# 1. 对真实 Linux v5.10 checkout 执行 L1 checker
+python3 verify_source_contract.py "$K510"
+
+# 2. 再按本 README 的 L1 小节人工检查上下文和 CONFIG/runtime 边界
+# 3. 有匹配 build tree 时执行 L2
+# 4. 有 QEMU/GDB 环境时执行 L3
+```
+
+当前 checker 固定 7 组 L1 source-contract：
+
+```text
+1. copy_bootdata(): boot_params copy → sanitize → command-line copy → old boot-data unmap
+2. x86_64_start_kernel() → x86_64_start_reservations() → start_kernel()
+3. setup_arch() 位于 start_kernel() 内部
+4. local_irq_disable() → early_boot_irqs_disabled=true → setup_arch()
+5. setup_arch → memory → scheduler/RCU → IRQ/time → local_irq_enable → arch_call_rest_init
+6. mm_init(): mem_init → kmem_cache_init → vmalloc_init
+7. arch_call_rest_init() → rest_init() 的 B04/B05 边界
+```
+
+fixture self-test 已实际执行通过 8 个 unittest：1 个完整正例 + 7 个负例，exit code 0；完整正例返回 7 组 contract。负例分别破坏 boot-data unmap 顺序、reservations handoff、`setup_arch()` 所属层次、early IRQ software-state 顺序、timekeeping/IRQ-enable 顺序、slab/vmalloc 顺序和 `rest_init()` 边界。
+
+这项结果只属于工具证据：它证明 checker 的 acceptance/rejection 行为符合设计，不证明真实 Linux v5.10 checkout、实际 `vmlinux` 或某次启动现场已经通过相应检查。
 
 ## 3. L1：验证 boot data ownership 交接
 
@@ -196,13 +230,7 @@ local_irq_disable()
 
 这里的 `<` 表示源码主线中的先后关系，不表示每个相邻函数之间都有直接调用。
 
-另外检查：
-
-```text
-early_boot_irqs_disabled = true
-```
-
-与 `local_irq_disable()` 的位置。B04 的结论是“基础设施建立期间 local IRQ 保持关闭，之后显式打开”，而不是“进入 `start_kernel()` 时中断已经正常运行”。
+另外检查 `early_boot_irqs_disabled = true` 与 `local_irq_disable()` 的位置。B04 的结论是“基础设施建立期间 local IRQ 保持关闭，之后显式打开”，而不是“进入 `start_kernel()` 时中断已经正常运行”。
 
 `cgroup_init_early()` 可能出现在这条真实源码顺序中，但当前基础课程不展开 cgroup；不要为了课程范围而篡改真实调用顺序，也不要把它扩写成专题。
 
@@ -227,11 +255,8 @@ CONFIG_CMDLINE_BOOL / CONFIG_CMDLINE_OVERRIDE
 
 ```bash
 nm -n vmlinux | grep -E ' x86_64_start_kernel$| x86_64_start_reservations$| start_kernel$| setup_arch$| mm_init$| sched_init$'
-
 readelf -Ws vmlinux | grep -E 'x86_64_start_kernel|start_kernel|setup_arch'
-
-objdump -dr --no-show-raw-insn vmlinux \
-  | less
+objdump -dr --no-show-raw-insn vmlinux | less
 ```
 
 L2 要回答：
@@ -314,7 +339,12 @@ compiler/binutils:
 QEMU command:
 kernel command line:
 
+工具证据:
+- checker self-test:
+- positive/negative fixtures:
+
 L1:
+- checker result:
 - copy_bootdata ownership:
 - reservations → start_kernel:
 - start_kernel → setup_arch:
@@ -344,7 +374,7 @@ L3:
 4. memblock/early mapping 先建立，普通 page/slab/vmalloc 能力随后逐步形成；
 5. scheduler/RCU/IRQ/timer/timekeeping 基础在 `local_irq_enable()` 前按依赖建立；
 6. 软件变量 `early_boot_irqs_disabled` 与硬件 RFLAGS.IF 必须分别观察；
-7. L1 源码事实、L2 build artifact 和 L3 runtime 证据不能互相冒充。
+7. checker fixture、L1 源码事实、L2 build artifact 和 L3 runtime 证据不能互相冒充。
 
 ## 12. 当前验证状态
 
@@ -352,12 +382,17 @@ L3:
 
 - Linux v5.10 source-level fact check；
 - B04 正式教程；
-- 本实验的 L1/L2/L3 验收设计。
+- L1/L2/L3 实验设计与 `expected-analysis.md`；
+- `verify_source_contract.py`：7 组 L1 source-contract；
+- `test_verify_source_contract.py`：1 个完整正例 + 7 个负例；
+- fixture self-test 已实际执行：8 个 unittest 全部通过，exit code 0，完整正例返回 7 组 contract。
 
 当前环境未执行：
 
-- 真实 v5.10 checkout 上的命令级 L1 复核；
+- 在真实 Linux v5.10 checkout 上运行 `verify_source_contract.py`；
 - 匹配构建的 `nm/readelf/objdump`；
 - QEMU/GDB P0–P3 动态观察。
 
-下一最小实验单元应补 `expected-analysis.md`，把 ownership、调用层次、allocator/IRQ 能力边界与证据等级固定为独立验收基线；随后再将适合机器判断的 L1 条件转换成 source-contract checker。
+因此当前可以把 Linux v5.10 source-level 事实与 checker 自测试结果作为不同层级的已完成证据，但不能把 fixture self-test 升格成真实源码、构建产物或运行时验证。
+
+下一最小课程单元是执行 B04 正文、source-path、实验和 expected analysis 的整章一致性复核；如发现状态或事实不一致，应先实际修正，再生成 completion review。
