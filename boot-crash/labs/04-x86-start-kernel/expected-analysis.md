@@ -181,9 +181,37 @@ local_irq_disable()
 
 源码中存在条件路径，不等于某次实际启动执行了它。L2/L3 结果必须同时记录 `.config` 和 runtime 条件。
 
-## 9. L1 / L2 / L3 证据等级
+## 9. 自动 L1 checker 的验收范围
 
-### L1：Linux v5.10 source contract
+当前实验已经建立 `verify_source_contract.py`，把适合机器判断的源码事实固定为 7 组 contract：
+
+```text
+1. copy_bootdata(): boot_params copy → sanitize → command-line copy → old boot-data unmap
+2. x86_64_start_kernel() → x86_64_start_reservations() → start_kernel()
+3. setup_arch() 位于 start_kernel() 内部
+4. local_irq_disable() → early_boot_irqs_disabled=true → setup_arch()
+5. setup_arch → memory → scheduler/RCU → IRQ/time → local_irq_enable → arch_call_rest_init
+6. mm_init(): mem_init → kmem_cache_init → vmalloc_init
+7. arch_call_rest_init() → rest_init() 的 B04/B05 边界
+```
+
+`test_verify_source_contract.py` 已建立 1 个完整正例和 7 个负例，并已实际执行通过 8 个 unittest，exit code 0；完整正例返回 7 组 contract。负例覆盖 boot-data unmap 顺序、reservations handoff、`setup_arch()` 层次、early IRQ software-state 顺序、timekeeping/IRQ-enable 顺序、slab/vmalloc 顺序以及 `rest_init()` 边界。
+
+这项结果属于**工具证据**：它证明 checker 的 acceptance/rejection 行为符合设计。它不能证明真实 Linux v5.10 checkout 已通过 L1，也不能证明实际构建或运行现场。
+
+## 10. 工具证据 / L1 / L2 / L3 证据等级
+
+### 工具证据：checker fixture self-test
+
+工具证据只能证明：
+
+- 完整正确 fixture 能被 checker 接受；
+- 被针对性破坏的 fixture 能被 checker 拒绝；
+- checker 的关键 matcher 与顺序约束按设计工作。
+
+工具证据不能替代任何 Linux 源码、构建产物或运行现场证据。
+
+### L1：真实 Linux v5.10 source contract
 
 L1 可以证明：
 
@@ -193,7 +221,7 @@ L1 可以证明：
 - memory/scheduler/IRQ/time 初始化的源码偏序；
 - CONFIG/runtime guard 在源码中的存在方式。
 
-L1 不能证明某个实际构建是否 inline/消除了函数边界，也不能证明某次启动现场的寄存器和状态值。
+自动 checker 应在真实 v5.10 checkout 上运行；人工源码阅读继续负责检查正则无法表达的上下文和 CONFIG/runtime 语义。L1 不能证明某个实际构建是否 inline/消除了函数边界，也不能证明某次启动现场的寄存器和状态值。
 
 ### L2：匹配构建的 `vmlinux`
 
@@ -216,34 +244,38 @@ L3 才能观察：
 
 源码推导不能冒充这些运行时结果。
 
-## 10. 当前验收状态
+## 11. 当前验收状态
 
 当前仓库已经完成：
 
 - Linux v5.10 source-level fact check；
 - B04 正式教程；
 - B04 L1/L2/L3 实验设计；
-- 本 expected analysis 的独立验收基线。
+- 本 expected analysis 的独立验收基线；
+- 7 组自动 L1 source-contract checker；
+- 1 个完整正例 + 7 个负例 fixture self-test；
+- fixture self-test 的实际执行：8 个 unittest 全部通过，exit code 0。
 
 当前环境尚未执行：
 
-- 真实 Linux v5.10 checkout 上的命令级 L1 复核；
+- 在真实 Linux v5.10 checkout 上运行 checker CLI；
 - 匹配构建的 `nm/readelf/objdump`；
 - QEMU/GDB P0–P3 动态观察。
 
-因此当前可以把 source-level 结论作为 B04 的实现基线，但不能把 L2/L3 描述写成已实测事实。
+因此当前可以把已人工核验的 Linux v5.10 source-level 结论作为 B04 的实现基线，并把 fixture 结果作为 checker 自身的工具证据；不能把尚未执行的真实-checkout L1、L2 或 L3 描述写成已实测事实。
 
-## 11. B04 收章前的下一项工作
+## 12. B04 收章前的下一项工作
 
-下一最小单元应把适合机器判断的 L1 条件转换成自动 source-contract checker，至少覆盖：
+自动 checker 与 fixture 已经完成，不再把它们列为后续工作。下一最小单元是执行 B04 整章一致性复核：交叉检查 source-path、正式教程、实验 README、本 expected analysis 和 checker，重点确认：
 
 ```text
-copy_bootdata() ownership copy/sanitize/unmap
-x86_64_start_reservations() → start_kernel()
-start_kernel() → setup_arch()
-early local IRQ disable/software flag
-setup_arch → mm_init → sched_init → IRQ/time → local_irq_enable 的关键偏序
-arch_call_rest_init() 的结束边界
+boot-data ownership 与 lifetime
+start_kernel()/setup_arch() 调用层次
+memblock → ordinary allocator 的能力边界
+early_boot_irqs_disabled 与 RFLAGS.IF 的证据边界
+memory → scheduler/RCU → IRQ/time → local_irq_enable 的源码偏序
+arch_call_rest_init() 作为 B04/B05 的章节交接点
+工具证据 / L1 / L2 / L3 的证据等级
 ```
 
-checker 只能提升 L1 的可重复性；它仍不能替代 L2 build artifact 或 L3 runtime 证据。
+若复核没有发现新的事实问题，则生成 B04 completion review；真实 checkout、L2 和 L3 保留为增强证据，不阻塞内容层面的收章。
