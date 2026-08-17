@@ -18,9 +18,13 @@
 
 ## 2. 证据分层
 
-本实验严格区分三层证据：
+本实验严格区分三层 Linux 事实证据，并把 checker 自测试单独列为“工具证据”：
 
 ```text
+工具证据
+    test_verify_source_contract.py
+    只验证 checker 自身能接受完整 fixture、拒绝已知破坏契约的 fixture
+
 L1  源码/构建契约
     Makefile、head_64.S、misc.c、kaslr.c、vmlinux.lds.S
 
@@ -31,11 +35,61 @@ L3  运行时现场
     QEMU/GDB 中 compressed startup_64、extract_kernel() 与 formal entry 前后的寄存器和地址
 ```
 
-L1 可以证明 Linux 5.10 源码如何设计；L2 才能证明某个实际配置生成了什么 ELF/机器码；L3 才能证明某次启动实际采用了什么地址和控制流。不得用较低层证据替代较高层结论。
+工具自测试通过不等于 Linux 5.10 源码已经通过 checker。L1 可以证明 Linux 5.10 源码如何设计；L2 才能证明某个实际配置生成了什么 ELF/机器码；L3 才能证明某次启动实际采用了什么地址和控制流。不得用较低层证据替代较高层结论。
 
-## 3. L1：核验 compressed image 的构建边界
+## 3. 先验收自动 checker 自身
 
-在 Linux 5.10 源码树中执行：
+本目录提供：
+
+```text
+verify_source_contract.py
+    对 Linux 5.10 source tree 执行 B02 L1 source/build contract 检查
+
+test_verify_source_contract.py
+    使用正/负 fixture 验证 checker 的 acceptance/rejection 行为
+
+checker-selftest.md
+    保存已经实际执行过的 checker 自测试结果及证据边界
+```
+
+在使用 checker 检查真实源码树之前，先执行：
+
+```bash
+cd boot-crash/labs/02-compressed-kernel
+python3 -m unittest -v test_verify_source_contract.py
+```
+
+仓库当前版本的 fixture 自测试已经实际执行：**1 个完整正例和 7 个负例全部通过；完整正例返回 10 项 L1 contract 检查。** 详细记录见 [checker-selftest.md](checker-selftest.md)。这一结果只证明 checker 自身的 matcher/fixture 行为，不是 Linux 5.10 checkout、ELF 或启动现场的实测结果。
+
+## 4. L1：运行自动 source/build contract checker
+
+具备完整 Linux 5.10 checkout 时，执行：
+
+```bash
+cd boot-crash/labs/02-compressed-kernel
+python3 verify_source_contract.py /path/to/linux-5.10
+```
+
+checker 自动核验的 10 组条件为：
+
+1. compressed C 使用 `-fPIE`；
+2. compressed C 使用 `-ffreestanding`；
+3. compressed C 使用 `-fno-stack-protector`；
+4. compressed `vmlinux` 使用 PIE link；
+5. `CONFIG_RANDOMIZE_BASE` 控制 `kaslr.o`；
+6. `CONFIG_X86_NEED_RELOCS` 控制 relocation payload；
+7. compressed assembly 包含 `startup_32` / `startup_64` 并调用 `extract_kernel()`；
+8. `extract_kernel()` 接收 `boot_params`，并按 `max(output_len, kernel_total_size)` 建立 `needed_size`；
+9. `choose_random_location → __decompress → parse_elf → handle_relocations` 的阶段顺序成立；
+10. KASLR avoidance 集合包含 decompressor、initrd、command line 与 `boot_params`。
+
+checker 属于 L1 静态证据。它通过后仍不能声称当前 `.config` 一定启用了 KASLR/relocation，也不能证明实际 ELF 布局或某次启动地址。
+
+当前仓库维护环境没有可执行的完整 Linux v5.10 checkout，因此本项尚未在真实源码树上执行。
+
+## 5. L1：人工核验 compressed image 的构建边界
+
+自动 checker 之后仍应阅读上下文，避免把正则匹配当成完整源码理解。在 Linux 5.10 源码树中执行：
 
 ```bash
 cd /path/to/linux-5.10
@@ -56,7 +110,7 @@ grep -nE 'CONFIG_RANDOMIZE_BASE|kaslr\.o|CONFIG_X86_NEED_RELOCS|vmlinux\.relocs'
 
 这里验证的是构建规则，不要仅凭 Makefile 就声称当前 `.config` 一定启用了 KASLR 或 relocation。
 
-## 4. L1：核验入口与 `extract_kernel()` 主线
+## 6. L1：人工核验入口与 `extract_kernel()` 主线
 
 先定位两个 compressed 入口和 C decompressor：
 
@@ -82,7 +136,7 @@ return entry
 
 特别记录 `choose_random_location()` 在关闭 `CONFIG_RANDOMIZE_BASE` 时的实现边界，以及 `handle_relocations()` 在关闭 `CONFIG_X86_NEED_RELOCS` 时是否退化为空实现。
 
-## 5. L1：核验 KASLR 的“约束内随机”模型
+## 7. L1：核验 KASLR 的“约束内随机”模型
 
 在 `arch/x86/boot/compressed/kaslr.c` 中定位：
 
@@ -96,7 +150,7 @@ git grep -n 'choose_random_location' -- arch/x86/boot/compressed
 
 实验报告中不要写“随机生成一个物理地址”。应写清：先根据 memory map 和占用区形成合法候选，再从候选 slots 中随机选择。
 
-## 6. L2：分别检查 compressed 与 formal 两个 ELF
+## 8. L2：分别检查 compressed 与 formal 两个 ELF
 
 需要一棵已经成功构建的 Linux 5.10 tree。先确认两个文件都存在：
 
@@ -123,7 +177,7 @@ nm -n vmlinux | grep -E 'startup_64|x86_64_start_kernel'
 
 观察重点不是比较两个 `startup_64` 谁的数值更大，而是证明它们属于两个独立 ELF/链接上下文。跨 ELF 的符号地址不能直接拿来推导启动先后。
 
-## 7. L2：检查真实机器码中的调用与 handoff
+## 9. L2：检查真实机器码中的调用与 handoff
 
 对 compressed ELF 反汇编：
 
@@ -142,7 +196,7 @@ grep -n -A30 -B20 'extract_kernel' /tmp/compressed-vmlinux.dis
 
 具体寄存器和指令必须以当前构建产物为准，不要从源码记忆补全反汇编。
 
-## 8. L2：核验 formal kernel 的 `PT_LOAD` 布局
+## 10. L2：核验 formal kernel 的 `PT_LOAD` 布局
 
 `parse_elf()` 处理的是解压后 formal kernel 的 ELF program headers。对根 `vmlinux` 执行：
 
@@ -163,9 +217,9 @@ Align
 
 然后回到 `parse_elf()`，解释为什么 `FileSiz` 与 `MemSiz` 可以不同，以及为什么“`__decompress()` 已结束”仍不等于“formal kernel 的全部运行时内存布局已经完成”。
 
-## 9. L3：QEMU/GDB 动态观察点
+## 11. L3：QEMU/GDB 动态观察点
 
-只有在隔离的测试虚拟机中执行。建议至少设置三个观察点：
+只有在隔离的测试虚拟机中执行。建议至少设置四个观察点：
 
 ```text
 P0  compressed startup_64
@@ -188,7 +242,7 @@ CR3（只记录阶段变化；页表机制本身留给 memory/assembly）
 
 若启用了 KASLR，还应记录实际 output/entry，并与未启用 KASLR 的构建对比。不要把一次启动观察到的随机地址写成 Linux 5.10 的固定地址。
 
-## 10. 结果记录模板
+## 12. 结果记录模板
 
 ```text
 Kernel version / commit:
@@ -198,7 +252,12 @@ Kernel version / commit:
   CONFIG_RANDOMIZE_BASE=
   CONFIG_X86_NEED_RELOCS=
 
+Checker self-test:
+  command:
+  result:
+
 L1 source/build contract:
+  checker command/result:
   PIE/freestanding:
   kaslr.o condition:
   relocation payload condition:
@@ -221,10 +280,12 @@ L3 runtime:
 Not executed / environment limits:
 ```
 
-## 11. 通过标准
+## 13. 通过标准
 
 本实验的最低通过条件是：
 
+- checker fixture self-test 通过；
+- 若有完整 Linux 5.10 checkout，实际执行 `verify_source_contract.py` 并保存结果；
 - 能从 Linux 5.10 源码解释 compressed image 与 formal image 的构建和所有权边界；
 - 能准确写出 `extract_kernel()` 中位置选择、解压、ELF placement、relocation 的先后关系；
 - 能说明 KASLR 和 relocation 的配置条件，不能写成无条件路径；
@@ -233,4 +294,22 @@ Not executed / environment limits:
 - 若有 build tree，实际执行 `readelf`、`nm`、`objdump` 并保存结果；
 - 若有 QEMU/GDB，记录 P0–P3；若环境缺失，明确写“未执行”，不得生成虚构输出。
 
-当前仓库维护环境没有可执行 Linux 5.10 build tree 或 QEMU/GDB 启动现场，因此本文件只建立可复现的实验方法与验收标准；L2/L3 结果尚未执行。
+## 14. 当前执行状态
+
+当前已经实际完成：
+
+```text
+checker fixture self-test:
+  1 positive + 7 negative fixtures: PASS
+  complete positive fixture: 10 L1 checks
+```
+
+当前尚未执行：
+
+```text
+真实 Linux v5.10 checkout 上的 verify_source_contract.py
+真实 compressed/formal ELF 的 readelf/nm/objdump
+QEMU/GDB P0–P3 动态观察
+```
+
+原因是当前仓库维护环境没有可执行 Linux 5.10 checkout/build tree 或 QEMU/GDB 启动现场。不得把 fixture self-test 的结果升级解释为上述 L1/L2/L3 实测结果。
