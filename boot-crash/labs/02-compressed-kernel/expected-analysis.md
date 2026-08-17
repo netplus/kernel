@@ -211,18 +211,48 @@ CONFIG_X86_NEED_RELOCS
 8. “源码中存在 KASLR 代码，所以本次构建一定启用了 KASLR。”
 9. “fixture/source checker 通过就等于真实 ELF 或运行时已经验证。”
 
-## 12. 当前验证状态
+## 12. 自动 checker 与工具证据
 
-截至本验收基线写入仓库时：
+本实验已经建立：
 
-- Linux 5.10 的 B02 源码事实已经完成核验；
-- B02 正式教程和实验方法已经建立；
-- 本文件固定了 L1/L2/L3 的预期结果和错误判定；
-- 当前仓库维护环境没有可执行的 Linux 5.10 build tree，因此尚未记录真实 `readelf`、`nm`、`objdump` 结果；
-- 当前也没有 QEMU/GDB 启动现场，因此 P0–P3 尚未执行。
+```text
+verify_source_contract.py
+    对完整 Linux 5.10 source tree 检查 B02 的 L1 source/build contract
 
-未执行的 L2/L3 项目仍是增强验证，不能用推测结果填充。
+test_verify_source_contract.py
+    用正/负 fixture 检查 matcher 的 acceptance/rejection 行为
 
-## 13. B02 收章前的下一步
+checker-selftest.md
+    保存实际执行过的 checker 自测试结果
+```
 
-下一最小单元应把本文件中可由源码静态判定的 L1 条件转换为自动 checker，并为 checker 增加正/负 fixture 自测试。至少应自动拒绝：PIE/freestanding 构建契约缺失、KASLR/relocation 配置边界丢失、`extract_kernel()` 主线顺序破坏，以及 compressed/formal 映像归属被混淆。
+当前 checker 覆盖 10 组静态契约：compressed PIE/freestanding/stack-protector 构建约束、PIE link、KASLR 与 relocation 的 CONFIG 边界、compressed assembly 到 `extract_kernel()` 的关系、`boot_params`/`needed_size` 契约、`choose_random_location → __decompress → parse_elf → handle_relocations` 顺序，以及关键 `MEM_AVOID_*` 区域。
+
+checker fixture self-test 已实际执行：**1 个完整正例和 7 个负例全部通过；完整正例返回 10 项 L1 contract 检查。**
+
+这属于“工具证据”，只证明 checker 对已知 fixture 的接受/拒绝行为。它不能替代在真实 Linux 5.10 checkout 上运行 checker，更不能替代 L2 ELF/机器码或 L3 runtime 证据。
+
+## 13. 当前验证状态
+
+截至本次同步：
+
+已完成：
+
+- Linux 5.10 的 B02 源码事实核验；
+- B02 正式教程、实验方法与本验收基线；
+- `verify_source_contract.py` 自动 L1 checker；
+- `test_verify_source_contract.py` 正/负 fixture；
+- checker fixture self-test 的实际执行记录：1 positive + 7 negative PASS，完整正例返回 10 项检查；
+- 自动 checker/self-test 已接入实验 README 的正式执行流程。
+
+尚未执行：
+
+- 在完整 Linux v5.10 checkout 上实际运行 `verify_source_contract.py`；
+- 对真实 compressed/formal ELF 执行 `readelf`、`nm`、`objdump`；
+- QEMU/GDB P0–P3 动态观察。
+
+这些未执行项分别属于真实 L1、L2 和 L3 增强证据。不得用 fixture self-test、源码阅读或推测结果填充。
+
+## 14. B02 收章前的下一步
+
+自动 checker 与 fixture 验证已经完成，不再把它们列为未来工作。下一最小单元是执行 B02 整章一致性复核：交叉检查正式教程、Linux 5.10 source-path、实验和本 expected analysis 中的映像归属、PIE/relocation 边界、CONFIG 条件、`extract_kernel()` 阶段语义以及工具证据/L1/L2/L3 分层。若无新的事实缺口，则生成 completion review，再更新领域 README 收章。
