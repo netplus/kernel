@@ -6,6 +6,7 @@
 
 - `../../docs/03-formal-head64-and-early-paging.md`
 - `../../source-paths/03-formal-head64-early-paging-linux-5.10.md`
+- `expected-analysis.md`
 
 完整页表结构和页表项格式属于 `memory/`；long-mode transition、GDT 和控制寄存器机器语义属于 `assembly/`。本实验只观察启动阶段的状态交接。
 
@@ -23,11 +24,33 @@
 8. `initial_code` 为什么能够把 formal assembly entry 交给 `x86_64_start_kernel()`？
 9. BSP `startup_64` 与 `secondary_startup_64` 为什么不能视为同一入口？
 
-## 2. 证据等级
+## 2. 证据等级与执行顺序
 
-实验把证据分成三层，结论必须注明来自哪一层。
+实验把证据分成四类。工具自测试只证明 checker 自身能够接受完整 fixture、拒绝已知破坏，不属于 Linux 事实证据；Linux 事实仍按 L1/L2/L3 分层。
 
-### L1：Linux 5.10 源码事实
+### 工具证据：先验证 checker 自身
+
+本目录包含：
+
+```text
+verify_source_contract.py
+    对 Linux v5.10 source tree 执行 L1 source-contract 检查。
+
+test_verify_source_contract.py
+    使用最小正/负 fixture 验证 checker 的 acceptance/rejection 行为。
+```
+
+先在本目录执行：
+
+```bash
+python3 -m unittest -v test_verify_source_contract.py
+```
+
+当前维护记录：该 self-test 已实际执行，8 个 unittest 全部通过（1 个完整正例 + 7 个负例），exit code 为 0。完整正例返回 6 组 source-contract。负例分别破坏 formal-entry identity-map 契约、`load_delta` 公式、SME return、CR3/virtual-target 顺序、`initial_code` 目标、AP 的 `init_top_pgt` ownership 和 early dynamic page-table pool size。
+
+这项结果只能说明测试工具对这些 fixture 的行为符合预期，不能据此声称真实 Linux v5.10 checkout、某个 `vmlinux` 或某次启动已经通过验证。
+
+### L1：真实 Linux 5.10 源码事实
 
 需要 Linux v5.10 源码树。主要文件：
 
@@ -38,7 +61,22 @@ arch/x86/include/asm/page_64_types.h
 arch/x86/include/asm/pgtable_64_types.h
 ```
 
-这一层可以证明符号、源码顺序、公式、配置条件和静态数据归属，但不能证明某次启动时寄存器的实际值。
+在真实 checkout 上先运行：
+
+```bash
+python3 verify_source_contract.py /path/to/linux-5.10
+```
+
+checker 当前自动检查 6 组契约：
+
+1. formal `startup_64` 的 64-bit/identity-map/`%rsi` 入口条件，以及 `verify_cpu → __startup_64 → early_top_pgt` 的 BSP 顺序；
+2. `load_delta`、PMD 对齐、`early_top_pgt`/`early_dynamic_pgts`、non-global switchover mapping、`phys_base` 和 SME-modifier return；
+3. `EARLY_DYNAMIC_PAGE_TABLES == 64`；
+4. `phys_base → sev_verify_cbit → CR3 write → virtual-address target/jump → GDT → stack → early IDT → RFLAGS → %rsi→%rdi → lretq`，以及 `initial_code == x86_64_start_kernel`；
+5. secondary CPU 的 `__startup_secondary_64 → init_top_pgt` ownership 与 SEV-ES no-verify 特例；
+6. LA57 是从 decompressor 阶段接管的状态，而不是在 formal entry 首次启用。
+
+自动检查通过后仍要阅读对应源码上下文。正则匹配用于防止关键事实漂移，不替代对条件分支、注释语义和周边控制流的人工核验。这一层可以证明符号、源码顺序、公式、配置条件和静态数据归属，但不能证明某次启动时寄存器的实际值。
 
 ### L2：实际构建产物和机器码
 
@@ -64,6 +102,8 @@ GDTR
 ```
 
 如果当前环境没有可调试的 Linux 5.10 build/QEMU，本层明确记录“未执行”，不要填写推测值。
+
+当前维护环境尚未在真实 Linux v5.10 checkout 上运行 checker，也没有匹配的 `vmlinux` 与 QEMU/GDB 现场，因此当前已执行证据仅为 checker fixture self-test；L1 的源码事实已通过课程编写时的 upstream v5.10 阅读核验，但本实验的真实-checkout CLI 记录、L2、L3 仍保留为未执行增强证据。
 
 ## 3. L1：验证 formal `startup_64` 的入口契约
 
@@ -318,7 +358,14 @@ Kernel commit/tag:
 Compiler/binutils:
 QEMU/GDB:
 
+Checker self-test:
+- command:
+- positive fixture:
+- negative fixtures:
+- result:
+
 L1 source facts:
+- checker command/result:
 - startup_64 entry contract:
 - load_delta formula/alignment:
 - early_top_pgt:
@@ -350,15 +397,16 @@ Unexecuted items / environment limits:
 
 本实验达到通过标准时，至少应能够证明：
 
-1. formal `startup_64` 接收的是已经处于 64-bit mode 的 CPU 和临时 identity mapping；
-2. `%rsi` 是 `boot_params` 的物理指针，并在最终 C handoff 前转到 `%rdi`；
-3. `load_delta` 描述实际 kernel physical load 与 link-time 假定之间的差值，并满足 Linux 5.10 early mapping 的对齐要求；
-4. `early_top_pgt` 和 `early_dynamic_pgts` 分别承担 BSP top-level table 与 switchover identity mapping 页表池职责；
-5. `__startup_64()` 返回 SME modifier，而 assembly 再形成 CR3；
-6. CR3 switch 与 virtual-address indirect jump 是两个独立状态变化；
-7. virtual-address execution 后还要建立 GDT、stack、early IDT、RFLAGS 和 C ABI 参数状态；
-8. `initial_code == x86_64_start_kernel`，最终通过 far return 完成 formal assembly → early C 交接；
-9. BSP 与 secondary CPU 使用不同 early page-table ownership，SEV-ES 特殊入口也被正确限定；
-10. 所有动态数值都来自实际构建/运行证据，没有把源码推导写成 GDB 实测。
+1. checker self-test 已通过，且该结果只作为工具证据；
+2. 在真实 Linux v5.10 checkout 上运行 L1 checker，并结合源码上下文确认 formal `startup_64` 接收的是已经处于 64-bit mode 的 CPU 和临时 identity mapping；
+3. `%rsi` 是 `boot_params` 的物理指针，并在最终 C handoff 前转到 `%rdi`；
+4. `load_delta` 描述实际 kernel physical load 与 link-time 假定之间的差值，并满足 Linux 5.10 early mapping 的对齐要求；
+5. `early_top_pgt` 和 `early_dynamic_pgts` 分别承担 BSP top-level table 与 switchover identity mapping 页表池职责；
+6. `__startup_64()` 返回 SME modifier，而 assembly 再形成 CR3；
+7. CR3 switch 与 virtual-address indirect jump 是两个独立状态变化；
+8. virtual-address execution 后还要建立 GDT、stack、early IDT、RFLAGS 和 C ABI 参数状态；
+9. `initial_code == x86_64_start_kernel`，最终通过 far return 完成 formal assembly → early C 交接；
+10. BSP 与 secondary CPU 使用不同 early page-table ownership，SEV-ES 特殊入口也被正确限定；
+11. 所有动态数值都来自实际构建/运行证据，没有把源码推导或 fixture 结果写成 GDB 实测。
 
-当前维护环境如果缺少 Linux 5.10 build tree 或 QEMU/GDB，只能完成 L1；L2/L3 必须明确保留为未执行项。
+当前维护环境如果缺少真实 Linux 5.10 checkout、匹配的 build tree 或 QEMU/GDB，则相应的 L1 CLI 记录、L2/L3 必须明确保留为未执行项。
