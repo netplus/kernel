@@ -7,6 +7,9 @@
 相关材料：
 
 - [`README.md`](README.md)
+- [`verify_source_contract.py`](verify_source_contract.py)
+- [`test_verify_source_contract.py`](test_verify_source_contract.py)
+- [`selftest-results.md`](selftest-results.md)
 - [`../../docs/06-kexec-why-and-lifecycle.md`](../../docs/06-kexec-why-and-lifecycle.md)
 - [`../../source-paths/06-kexec-model-linux-5.10.md`](../../source-paths/06-kexec-model-linux-5.10.md)
 
@@ -14,11 +17,47 @@
 
 ## 1. 首先固定证据等级
 
-B06 使用三层证据，三者不能互相冒充。
+B06 现在使用四级证据。最前面增加“工具证据”，目的是把 checker 自身是否可靠与 Linux 5.10 源码事实分开；四级证据不能互相冒充。
+
+### 工具证据：checker / fixture 自身
+
+`verify_source_contract.py` 当前固定 7 组 Linux v5.10 L1 契约；`test_verify_source_contract.py` 为它提供 1 个完整正例和 8 个负例。
+
+工具证据只回答：
+
+```text
+checker 能否接受满足约束的 fixture？
+checker 能否拒绝故意破坏约束的 fixture？
+```
+
+它不能回答真实 Linux v5.10 源码是否满足这些契约。
+
+仓库已经建立 exact-commit GitHub Actions 执行入口：
+
+```text
+.github/workflows/boot-crash-b06-selftest.yml
+```
+
+workflow 会 checkout 仓库实际提交内容并直接运行：
+
+```bash
+cd boot-crash/labs/06-kexec-lifecycle
+python3 -m unittest -v test_verify_source_contract.py
+```
+
+截至当前验收记录，**尚未取得可验证的 9-case PASS / exit code 0 结果**。当前 GitHub 工具路径不能可靠列出该 `push`/`workflow_dispatch` workflow 的 run 结果，本地执行环境又无法解析 `github.com` 取得 checkout。因此必须保持：
+
+```text
+fixture source present:                yes
+exact-commit execution path present:   yes
+exact-commit fixture PASS observed:    no
+```
+
+详细执行与可观察性记录见 [`selftest-results.md`](selftest-results.md)。没有可观察结果不能解释成 PASS、FAIL 或“workflow 没运行”。
 
 ### L1：Linux v5.10 source contract
 
-L1 用源码证明设计和实现关系，例如：
+L1 必须在真实 upstream Linux v5.10 checkout 上运行 checker 或人工核对源码，证明设计和实现关系，例如：
 
 - 两种 load API 与 normal/crash 两种 image purpose 是两个维度；
 - load path 构造并安装 `struct kimage`；
@@ -51,7 +90,7 @@ load 成功
 
 crash image 的动态测试还需要可靠的 `crashkernel=` 配置、可丢弃 VM、串口日志和恢复手段。没有这些条件时，不触发 panic。
 
-当前仓库尚未记录真实 v5.10 checkout、匹配 `vmlinux` 或可控 QEMU/Kexec runtime 的执行结果；因此这些层级必须继续标为“未执行”，不能用源码推导填写假数据。
+当前仓库尚未记录真实 v5.10 checkout、匹配 `vmlinux` 或可控 QEMU/Kexec runtime 的执行结果；因此 L1/L2/L3 必须继续标为“未执行”，不能用 fixture 或源码推导填写假数据。
 
 ---
 
@@ -146,7 +185,7 @@ traditional/file 两条 load path 都只为 non-crash image 准备 `image->swap_
 
 Linux v5.10 x86-64 的 `machine_kexec_prepare(struct kimage *image)` 应在 load path 中被调用。它可以建立 transition page-table state，并且仍处于允许资源准备、允许失败和回滚 load operation 的阶段。
 
-`machine_kexec()` 则属于之后的 execute/transition phase。验收时应确认源码注释和实现都表达以下约束：
+`machine_kexec()` 则属于之后的 execute/transition phase。Linux v5.10 中描述 point of no return / 不再分配内存的注释位于 `machine_kexec()` 定义之前，而不是函数体内部。验收时应检查这一真实源码布局以及函数实现共同表达的约束：
 
 ```text
 machine_kexec_prepare()
@@ -187,7 +226,23 @@ fatal event later
 
 ---
 
-## 7. L2 结果应如何解释
+## 7. 自动 L1 checker 的七组契约
+
+`verify_source_contract.py` 应固定以下七组关系；任何一项被破坏都应拒绝对应 fixture：
+
+1. traditional/file load API 与 normal/crash purpose 维度分离；
+2. `struct kimage` 通过 `xchg()` 安装到 persistent global slot；
+3. crash destination 受 `crashk_res` 约束；
+4. crash image 使用 crash-specific control-page policy；
+5. traditional/file 两条路径都只为 normal image 准备 `swap_page`；
+6. load path 中 `machine_kexec_prepare()` 位于 image installation 之前；
+7. x86 `machine_kexec_prepare()` 预先建立 transition page-table state，而 point-of-no-return 注释与 `machine_kexec()` 定义的真实位置关系必须符合 Linux v5.10。
+
+fixture suite 的目标是证明 checker 对这些规则具有基本的接受/拒绝能力，不是替代真实 Linux v5.10 L1 运行。
+
+---
+
+## 8. L2 结果应如何解释
 
 在匹配 Linux v5.10 build 上，至少记录：
 
@@ -205,9 +260,9 @@ vmlinux Build ID（如存在）
 
 ---
 
-## 8. L3 normal Kexec 的最小通过现场
+## 9. L3 normal Kexec 的最小通过现场
 
-隔离 VM 中，一个足够清晰的最小动态证据应包含两个时间段。
+隔离 VM 中，一个足够清晰的最小动态证据应包含三个时间点。
 
 ### T0：load 之前
 
@@ -242,7 +297,7 @@ B06 不要求在这里观察 `relocate_kernel` 的 CR3、GDT/IDT 或 page-list c
 
 ---
 
-## 9. 常见错误结果及判定
+## 10. 常见错误结果及判定
 
 ### 错误一：load command 返回 0，因此记录“已经进入新内核”
 
@@ -264,27 +319,44 @@ B06 不要求在这里观察 `relocate_kernel` 的 CR3、GDT/IDT 或 page-list c
 
 不通过。破坏性实验必须有隔离、日志和恢复条件；缺环境时明确记录未执行才是正确结果。
 
+### 错误六：CI run 查询返回空集，因此记录“fixture PASS”或“fixture 没运行”
+
+不通过。当前可用查询对 workflow trigger 的覆盖有限；空结果只能记录为“结果当前不可观察”。fixture PASS 必须来自 exact committed suite 的明确 job/step 输出或可审计 checkout 中的实际 unittest 输出。
+
 ---
 
-## 10. B06 独立通过标准
+## 11. B06 独立通过标准
 
 B06 实验在当前层次至少应能够回答：
 
 1. 为什么 load/prepare 与 execute/transition 必须分离？
 2. `struct kimage` 为什么能在 syscall 返回后继续存在？
 3. traditional/file 与 normal/crash 为什么是两个维度？
-4. crash image 在 destination、control pages、`swap_page` 上与 normal image有什么 load-time 差异？
+4. crash image 在 destination、control pages、`swap_page` 上与 normal image 有什么 load-time 差异？
 5. 为什么 `machine_kexec_prepare()` 可以失败，而进入 `machine_kexec()` 后不应再依赖普通分配和恢复？
 6. normal/crash execute 为什么不能共享同一套“旧 kernel 仍健康”的前置假设？
-7. L1、L2、L3 各自能够证明什么，不能证明什么？
+7. 工具证据、L1、L2、L3 各自能够证明什么，不能证明什么？
 
 如果上述问题能够由正文、Linux v5.10 source-path 和实验相互印证，则 B06 的概念与实验模型已经闭环。
 
+当前自动化状态：
+
+```text
+L1 checker implementation:               complete (7 contract groups)
+fixture source:                           complete (1 positive + 8 negative)
+exact-commit CI execution path:           complete
+exact-commit fixture PASS observed:       no
+real Linux v5.10 L1 checker execution:    not executed
+matching-build L2:                        not executed
+isolated-VM L3:                           not executed
+```
+
 当前尚未执行的增强证据：
 
-- 在完整 Linux v5.10 checkout 上执行后续 source-contract checker；
+- 获得 exact committed 9-case fixture 的可验证 PASS / exit code 0；
+- 在完整 Linux v5.10 checkout 上执行 source-contract checker；
 - 对匹配构建执行 `nm/readelf/objdump`；
 - 在隔离 VM 中完成 normal `load → continue → execute → new kernel` 动态验证；
 - 在具备安全条件的 Kdump VM 中验证 crash image healthy-time preload 与 later crash consumption。
 
-下一最小单元是把上述稳定的 L1 条件转换成自动 source-contract checker，并用正/负 fixture 验证 checker 自身。
+下一最小验收动作不是继续新增 checker，而是**取得 exact committed fixture suite 的真实执行结果**。若 9 个测试全部通过并且 exit code 0，则把结果写入 [`selftest-results.md`](selftest-results.md) 和实验 README；若失败，则优先把失败作为修正单元，判断是 checker、fixture 还是 Linux v5.10 事实假设错误，修正后重新执行完整 suite。
