@@ -152,9 +152,39 @@ Linux v5.10 主线应解释为：
 
 成功的 `kernel_execve()` 也不是“创建一个新的用户态 PID 1”。task identity/PID 保持，变化的是执行映像和用户态执行上下文。
 
-## 8. L1、L2、L3 分别能够证明什么
+## 8. 自动 checker 与证据等级
 
-### L1：Linux v5.10 source contract
+B05 已建立 `verify_source_contract.py`，把本章稳定的 Linux v5.10 源码事实整理为 8 组 L1 source-contract：
+
+1. PID 1 / `kernel_init` 创建先于 `kthreadd`；
+2. `SYSTEM_SCHEDULING -> complete(kthreadd_done) -> schedule_preempt_disabled() -> cpu_startup_entry()`；
+3. PID 1 在 `do_basic_setup()` 前等待 `kthreadd_done`；
+4. `do_basic_setup() -> do_initcalls()`；
+5. initcall level 为 pure→core→postcore→arch→subsys→fs→device→late；
+6. 默认 `/init` 与 conditional `prepare_namespace()`；
+7. `SYSTEM_RUNNING` 先于用户态 init exec 尝试；
+8. `/init`、`init=`、`CONFIG_DEFAULT_INIT`、`/sbin/init`、`/etc/init`、`/bin/init`、`/bin/sh` 到 panic 的 fallback 顺序。
+
+checker 自身由 `test_verify_source_contract.py` 的 fixture self-test 验收。2026-08-18 已实际执行等价命令：
+
+```bash
+cd boot-crash/labs/05-rest-init-to-userspace
+python3 -m unittest -v test_verify_source_contract.py
+```
+
+结果为：
+
+```text
+Ran 9 tests
+OK
+exit code: 0
+```
+
+覆盖 **1 个完整正例 + 8 个针对性负例**；完整正例覆盖全部 8 组 contract。详细结果见 [`selftest-results.md`](selftest-results.md)。
+
+必须注意：fixture self-test 属于**工具证据**。它证明 checker 能接受完整 fixture，并能拒绝人为破坏相应契约的 fixture；它不能证明真实 Linux v5.10 checkout 已通过 checker。
+
+### L1：真实 Linux v5.10 source contract
 
 L1 可以证明：
 
@@ -168,6 +198,8 @@ L1 可以证明：
 
 L1 不能证明：某次启动中 PID 1 具体在哪个时刻第一次获得 CPU、是否实际在 completion 上睡眠、实际执行了哪些配置相关 initcalls、实际 rootfs 走哪条分支或哪个 init path 最终 exec 成功。
 
+当前尚未取得完整 Linux v5.10 checkout，因此 checker CLI 还没有在真实源码树上执行；不能把 fixture PASS 写成真实 L1 PASS。
+
 ### L2：匹配构建产物
 
 匹配源码、`.config` 和工具链的 `vmlinux` 可以进一步证明：
@@ -176,7 +208,7 @@ L1 不能证明：某次启动中 PID 1 具体在哪个时刻第一次获得 CPU
 - 编译后的 control flow 与当前配置相符；
 - 实际 initcall section/linker layout 中包含哪些 entries。
 
-不能仅按符号地址排序推导调用顺序。
+不能仅按符号地址排序推导调用顺序。当前尚未执行匹配构建的 L2 验证。
 
 ### L3：QEMU/GDB/boot log
 
@@ -189,7 +221,7 @@ L3 才能证明某次启动现场，例如：
 - early `/init` 分支的实际选择；
 - `SYSTEM_RUNNING` 与成功 exec/return-to-user 的实际时间关系。
 
-`initcall_debug`、GDB 和 QEMU 结果必须与本次 `.config`、Build ID 和启动参数绑定记录。
+`initcall_debug`、GDB 和 QEMU 结果必须与本次 `.config`、Build ID 和启动参数绑定记录。当前尚未执行 L3。
 
 ## 9. 常见错误的拒绝标准
 
@@ -207,6 +239,7 @@ L3 才能证明某次启动现场，例如：
 ## 10. 基础验收矩阵
 
 ```text
+checker fixture self-test                         PASS (9 tests, 1 positive + 8 negative)
 PID 1 before kthreadd creation                    PASS/FAIL
 SYSTEM_SCHEDULING -> completion -> schedule       PASS/FAIL
 PID 1 waits for kthreadd_done                     PASS/FAIL
@@ -216,15 +249,25 @@ conditional prepare_namespace                     PASS/FAIL
 SYSTEM_RUNNING before init exec attempts          PASS/FAIL
 init fallback order                               PASS/FAIL
 PID/task identity preserved across successful exec PASS/FAIL
-L1/L2/L3 evidence kept separate                   PASS/FAIL
+Tool/L1/L2/L3 evidence kept separate              PASS/FAIL
 ```
 
-基础验收要求前述源码事实均能在 Linux v5.10 中定位并解释，且所有未执行的 L2/L3 项明确标注为未执行。增强验收是在匹配构建和可控 guest 中补齐 L2/L3，而不是改变 L1 的结论。
+基础验收要求前述源码事实均能在 Linux v5.10 中定位并解释，且所有未执行的真实 L1 checker、L2/L3 项明确标注为未执行。增强验收是在取得完整源码树、匹配构建和可控 guest 后补齐这些证据，而不是改变源码模型。
 
 ## 11. 当前执行状态
 
-本章当前已经完成 Linux v5.10 source-path、正式教程和实验主体。本文件补齐独立 expected-analysis 验收基线。
+B05 当前已经完成 Linux v5.10 source-path、正式教程、实验主体、独立 expected-analysis、8 组自动 source-contract checker，以及 checker 的正/负 fixture self-test。
 
-当前环境没有匹配 Linux v5.10 build tree、`vmlinux` 和可控 QEMU guest，因此尚未执行 L2 `nm/readelf/objdump` 或 L3 GDB/`initcall_debug`；这些项目继续保留为增强证据，不能以源码预期代替。
+2026-08-18 的工具自测试已实际执行通过：**9 tests = 1 个完整正例 + 8 个负例，`OK`，exit code 0**。该结果只属于 checker 工具证据。
 
-下一最小单元是把稳定的 L1 条件转换成自动 source-contract checker，并为 checker 建立正例与针对性负例自测试。
+当前环境尚未取得完整 Linux v5.10 checkout、匹配 `vmlinux` 和可控 QEMU guest，因此以下项目仍明确为未执行：
+
+```text
+L1  在真实 Linux v5.10 checkout 上执行 verify_source_contract.py
+L2  nm/readelf/objdump 与实际 initcall section/linker layout
+L3  GDB/initcall_debug 对 PID、调度、rootfs 分支和成功 exec 的动态观察
+```
+
+这些是增强证据，不用 fixture 结果替代。
+
+下一最小单元是对 B05 正文、source-path、实验 README、expected analysis、checker 和 self-test 做整章一致性复核；若没有新的事实缺口，则生成 B05 completion review。
