@@ -120,8 +120,8 @@ class B05SourceContractFixtureTests(unittest.TestCase):
 
     def test_rejects_unconditional_prepare_namespace(self) -> None:
         broken = MAIN.replace(
-            "ramdisk_execute_command = NULL;\n        prepare_namespace();",
-            "ramdisk_execute_command = NULL;\n    }\n    prepare_namespace();\n    if (0) {",
+            "if (init_eaccess(ramdisk_execute_command) != 0) {\n        ramdisk_execute_command = NULL;\n        prepare_namespace();\n    }",
+            "ramdisk_execute_command = NULL;\n    prepare_namespace();",
         )
         self.reject(broken)
 
