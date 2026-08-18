@@ -186,14 +186,39 @@ init/main.c
 
 完整的 memblock、buddy、SLUB、vmalloc 机制由 [`memory/`](../memory/) 展开；scheduler、RCU 和 timekeeping 的内部算法也留在各自领域。B04 只解释启动阶段的能力依赖和交接顺序。
 
-## B05：从 `start_kernel()` 到用户空间
+## B05：从 `start_kernel()` 到用户空间【已完成】
+
+本章解释 `start_kernel()` 的通用初始化结束后，boot task 如何在 `rest_init()` 中建立 PID 1、`kthreadd` 与 boot CPU idle 三种长期角色，以及 PID 1 如何继续在内核态完成 initcall/rootfs 启动尾声，最后通过 `exec` 越过用户态边界。
+
+核心范围：
+
+- `kernel_thread(kernel_init, ...)` 必须先于 `kernel_thread(kthreadd, ...)`，以保证 init task 取得 PID 1；
+- `SYSTEM_SCHEDULING → complete(&kthreadd_done) → schedule_preempt_disabled() → cpu_startup_entry()` 的 boot-task handoff；
+- `kernel_thread()` 返回、PID 1 第一次被调度、initcall 完成、`SYSTEM_RUNNING` 与成功 exec 是不同事件；
+- PID 1 在 `kernel_init_freeable()` 中等待 `kthreadd_done`，并经 `do_basic_setup() → do_initcalls()` 执行 initcalls；
+- initcall level 的 pure→core→postcore→arch→subsys→fs→device→late 顺序；
+- 默认 early `/init` 与 conditional `prepare_namespace()` 的 rootfs 分支；
+- `SYSTEM_RUNNING` 先于用户态 init exec attempts，不能作为“用户态 PID 1 已运行”的证据；
+- init fallback 以及成功 `kernel_execve()` 保持同一个 PID 1 task identity 的边界。
+
+已完成内容：
+
+- [正式教程：从 `rest_init()` 到用户空间](docs/05-rest-init-to-userspace.md)
+- [Linux 5.10 `rest_init()` 到用户空间源码事实核验](source-paths/05-rest-init-to-userspace-linux-5.10.md)
+- [实验：PID 0/1/2、initcall、rootfs 与 init exec 状态交接](labs/05-rest-init-to-userspace/)
+- [B05 收章复核](docs/05-b05-completion-review.md)
+
+实验已建立 8 组 L1 source-contract checker；fixture self-test 已实际执行 9 个 unittest（1 个完整正例 + 8 个负例），全部通过，exit code 0。fixture self-test 只属于工具证据；完整 Linux v5.10 checkout 上的 checker CLI、匹配构建的 `vmlinux`/initcall section 与 QEMU/GDB/`initcall_debug` 动态现场仍属于增强证据，不冒充为已执行结果。
+
+建议源码：
 
 ```text
-start_kernel() → arch_call_rest_init() → rest_init()
-→ kernel_init() → run_init_process() → user-space init
+init/main.c
+init/do_mounts.c
+include/linux/init.h
 ```
 
-重点说明 idle 任务、`kthreadd`、initcall、initramfs/rootfs，以及“创建 PID 1”与“PID 1 成功 exec 用户态 init”为什么是两个不同时间点。
+B05 到“同一个 PID 1 成功 exec 用户态 init”结束。用户态 `_start` 的初始 `%rsp`、`argc/argv/envp/auxv` 与字符串区由 [`assembly/`](../assembly/) 完整讲解；initramfs/VFS、scheduler 内部算法和用户态 init 自身不在本章重复展开。至此 B00–B05 的正常启动主线已经闭环。
 
 ---
 
