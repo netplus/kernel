@@ -1,0 +1,22 @@
+name: boot-crash B06 checker self-test
+
+on:
+  push:
+    paths:
+      - 'boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py'
+      - 'boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py'
+      - '.github/workflows/boot-crash-b06-selftest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout course repository
+        uses: actions/checkout@v4
+      - name: Run exact committed B06 fixture suite
+        working-directory: boot-crash/labs/06-kexec-lifecycle
+        run: python3 -m unittest -v test_verify_source_contract.py
