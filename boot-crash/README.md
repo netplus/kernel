@@ -153,9 +153,28 @@ arch/x86/include/asm/page_64_types.h
 
 Linux 5.10 BSP formal-entry 的 switchover identity mapping 直接在 `head64.c::__startup_64()` 中构造；`arch/x86/mm/ident_map.c` 不属于这条主调用链，因此不再把它列为 B03 主源码入口。完整页表机制放在 [`memory/`](../memory/)；本章只讲启动所需的页表状态和交接点。
 
-## B04：从 `x86_64_start_kernel()` 到 `start_kernel()`
+## B04：从 `x86_64_start_kernel()` 到 `start_kernel()`【已完成】
 
-主要内容：早期 BSS 和启动状态、早期异常处理、`boot_params`/命令行/内存信息接管、`setup_arch()`、架构初始化与通用 `start_kernel()` 的边界，以及页分配器、调度器、时钟、中断和 RCU 初始化的顺序约束。
+本章解释 formal kernel 进入 early C 后，如何取得启动数据 ownership，并按依赖关系逐步建立普通内核运行所需的架构与通用基础设施。重点不是罗列 `start_kernel()` 中的函数，而是理解“哪些能力在什么时候才真正可用”。
+
+核心范围：
+
+- `real_mode_data → boot_params + boot_command_line` 的 ownership/lifetime 交接；
+- `x86_64_start_kernel() → x86_64_start_reservations() → start_kernel() → setup_arch()` 的真实调用层次；
+- `setup_arch()` 仍处于 boot data、memblock 和 early mapping 世界，位于 `start_kernel()` 内部；
+- `build_all_zonelists()`、`page_alloc_init()`、`mm_init()` 对普通内存分配能力的逐步建立；
+- `sched_init()`、RCU、IRQ、tick/timer/softirq/timekeeping 与 `local_irq_enable()` 的源码偏序；
+- `early_boot_irqs_disabled` 软件状态与 CPU `RFLAGS.IF` 硬件状态的证据边界；
+- B04 在 `arch_call_rest_init()` 处结束，`rest_init()` 之后的 PID 1 / `kthreadd` / initcall / user-space handoff 留给 B05。
+
+已完成内容：
+
+- [正式教程：从 `x86_64_start_kernel()` 到 `start_kernel()`](docs/04-x86-start-kernel-to-start-kernel.md)
+- [Linux 5.10 early-C 与 `start_kernel()` 源码事实核验](source-paths/04-x86-start-kernel-linux-5.10.md)
+- [实验：early-C 到通用内核运行基础的状态交接](labs/04-x86-start-kernel/)
+- [B04 收章复核](docs/04-b04-completion-review.md)
+
+实验已建立 7 组 L1 source-contract checker，并实际执行通过 8 个 unittest（1 个完整正例 + 7 个负例，exit code 0）。fixture self-test 只属于工具证据；真实 Linux v5.10 checkout 上的 checker CLI、匹配构建的 `vmlinux`/`nm`/`readelf`/`objdump` 和 QEMU/GDB 动态现场仍属于增强证据，不冒充为已执行结果。
 
 建议源码：
 
@@ -164,6 +183,8 @@ arch/x86/kernel/head64.c
 arch/x86/kernel/setup.c
 init/main.c
 ```
+
+完整的 memblock、buddy、SLUB、vmalloc 机制由 [`memory/`](../memory/) 展开；scheduler、RCU 和 timekeeping 的内部算法也留在各自领域。B04 只解释启动阶段的能力依赖和交接顺序。
 
 ## B05：从 `start_kernel()` 到用户空间
 
