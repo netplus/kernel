@@ -99,7 +99,10 @@ int machine_kexec_prepare(struct kimage *image)
 {
     return init_pgtable(image, image->control_code_page);
 }
-/* machine_kexec is past the point of no return; no memory may be allocated. */
+/*
+ * Do not allocate memory (or fail in any way) in machine_kexec().
+ * We are past the point of no return, committed to rebooting now.
+ */
 void machine_kexec(struct kimage *image)
 {
     relocate_kernel();
@@ -153,7 +156,7 @@ class B06CheckerTests(unittest.TestCase):
         self.reject({"arch/x86/kernel/machine_kexec_64.c": X86.replace("return init_pgtable(image, image->control_code_page);", "return 0;")})
 
     def test_rejects_missing_point_of_no_return_contract(self) -> None:
-        self.reject({"arch/x86/kernel/machine_kexec_64.c": X86.replace("point of no return; no memory may be allocated", "final transition begins here")})
+        self.reject({"arch/x86/kernel/machine_kexec_64.c": X86.replace("past the point of no return", "final transition begins here")})
 
 
 if __name__ == "__main__":
