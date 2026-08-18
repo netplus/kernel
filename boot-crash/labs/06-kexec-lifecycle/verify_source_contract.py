@@ -139,14 +139,22 @@ def check(root: Path) -> list[str]:
     )
     passed.append("machine_kexec_prepare belongs to load/prepare phase")
 
-    # 7. x86 machine_kexec_prepare builds transition mappings; machine_kexec
-    # is separately documented as being beyond the point of no return.
+    # 7. x86 machine_kexec_prepare builds transition mappings.  Linux v5.10
+    # documents the point-of-no-return rule in the comment immediately before
+    # machine_kexec(), so check that source ordering rather than pretending the
+    # comment lives inside the function body.
     prepare = function_body(x86, r"int\s+machine_kexec_prepare\s*\(", "machine_kexec_prepare")
     require(prepare, r"init_pgtable\s*\(\s*image\s*,", "x86 transition page-table preparation")
-    require(
+    ordered(
         x86,
-        r"void\s+machine_kexec\s*\(.*?point\s+of\s+no\s+return.*?no\s+memory\s+may\s+be\s+allocated",
-        "machine_kexec point-of-no-return contract",
+        [
+            (
+                "point-of-no-return comment",
+                r"Do\s+not\s+allocate\s+memory\s*\(or\s+fail\s+in\s+any\s+way\)\s+in\s+machine_kexec\s*\(\s*\)\s*\.\s*.*?past\s+the\s+point\s+of\s+no\s+return",
+            ),
+            ("machine_kexec definition", r"void\s+machine_kexec\s*\("),
+        ],
+        "point-of-no-return contract before machine_kexec",
     )
     passed.append("x86 prepare and point-of-no-return transition are separate phases")
 
