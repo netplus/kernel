@@ -123,19 +123,29 @@ The repository contains:
 .github/workflows/boot-crash-b06-selftest.yml
 ```
 
-for exact committed fixture execution. The project has no additional runner budget. Prefer, in order:
+The workflow originally used `runs-on: ubuntu-latest`, which conflicted with the project's no-additional-runner-budget constraint. It has now been corrected to:
+
+```text
+workflow_dispatch only
+runs-on: [self-hosted, linux, x64, kernel-course]
+```
+
+This is intentional. The B06 exact-suite CI path must not silently consume potentially billable GitHub-hosted runner minutes. Until a matching self-hosted runner is registered, this workflow is an execution path but not execution evidence.
+
+Preferred execution order remains:
 
 ```text
 1. an already available local execution environment;
-2. a jointly configured self-hosted GitHub Actions runner;
+2. a jointly configured self-hosted GitHub Actions runner with the
+   self-hosted/linux/x64/kernel-course labels;
 3. another zero-new-cost environment that executes exact committed files.
 ```
 
-Do not silently switch to a potentially billable GitHub-hosted runner merely to obtain this evidence.
+A self-hosted runner must be treated as infrastructure: use a dedicated low-privilege account or VM where practical, restrict repository access, keep the `kernel-course` label explicit, and clean the work directory between jobs. Do not expose unrelated credentials to course test jobs.
 
 ## 6. Next acceptance action
 
-The next minimum acceptance unit is now two-part and must use the latest corrected checker:
+The next minimum acceptance unit is two-part and must use the latest corrected checker:
 
 ```text
 A. execute the exact current checker/fixture pair;
