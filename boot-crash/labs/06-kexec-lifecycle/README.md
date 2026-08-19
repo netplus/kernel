@@ -8,6 +8,10 @@
 
 - [`../../docs/06-kexec-why-and-lifecycle.md`](../../docs/06-kexec-why-and-lifecycle.md)
 - [`../../source-paths/06-kexec-model-linux-5.10.md`](../../source-paths/06-kexec-model-linux-5.10.md)
+- [`expected-analysis.md`](expected-analysis.md)
+- [`verify_source_contract.py`](verify_source_contract.py)
+- [`test_verify_source_contract.py`](test_verify_source_contract.py)
+- [`selftest-results.md`](selftest-results.md)
 
 > 本实验包含可能导致系统切换内核的命令。L3 execute/crash 部分只能在可丢弃的虚拟机或专用测试机中执行，不要在生产环境运行。
 
@@ -15,7 +19,28 @@
 
 ## 1. 要验证的问题
 
-实验分三层证据。
+实验按四级证据组织。工具证据用于验证 checker 自身；L1/L2/L3 分别验证真实源码、匹配构建和运行现场，不能互相替代。
+
+### 工具证据：source-contract checker self-test
+
+`verify_source_contract.py` 固定 7 组 B06 L1 契约；`test_verify_source_contract.py` 包含 1 个完整正例和 8 个针对性负例。
+
+执行：
+
+```bash
+cd boot-crash/labs/06-kexec-lifecycle
+python3 -m unittest -v test_verify_source_contract.py
+```
+
+2026-08-19 已实际执行当前 GitHub 版本的 checker/fixture pair，结果为：
+
+```text
+Ran 9 tests
+
+OK
+```
+
+exit code 为 `0`。完整记录见 [`selftest-results.md`](selftest-results.md)。这一结果只证明 checker 对合成 fixture 的接受/拒绝行为，不代表真实 Linux v5.10 L1 已通过。
 
 ### L1：Linux v5.10 source contract
 
@@ -28,6 +53,12 @@
 5. normal/crash 使用不同的 control-page allocation policy，且 normal image 才分配 `image->swap_page`；
 6. x86-64 `machine_kexec_prepare()` 在 load phase 建立 transition page-table 状态；
 7. x86-64 `machine_kexec()` 位于 execute/transition phase，源码明确把它放在 point of no return 之后，不应再分配内存或设计可恢复失败。
+
+自动检查可在真实 v5.10 checkout 上运行：
+
+```bash
+python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py /path/to/linux-v5.10
+```
 
 ### L2：匹配构建的符号与机器码
 
@@ -244,8 +275,7 @@ grep -n "init_pgtable\|init_transition_pgtable" arch/x86/kernel/machine_kexec_64
 ```bash
 nm -n vmlinux | grep -E ' (machine_kexec|machine_kexec_prepare|kimage_alloc_control_pages|sanity_check_segment_list)$'
 
-objdump -drS vmlinux \
-  | less
+objdump -drS vmlinux | less
 ```
 
 建议分别定位 generic load helper 与 `machine_kexec_prepare()`/`machine_kexec()` 的 call sites。
@@ -378,6 +408,10 @@ L3 crash preload/runtime:
 
 ## 12. 通过标准
 
+### 工具证据通过
+
+当前已完成：7 组 checker contract，1 个完整正例 + 8 个负例，实际执行 `9 / 9 PASS`、`OK`、exit code `0`。该结果不能替代真实 Linux v5.10 L1。
+
 ### L1 通过
 
 能够用 Linux v5.10 源码证明：
@@ -402,14 +436,17 @@ normal Kexec 至少观察到：load 成功后旧 kernel 继续运行，之后的
 
 ## 13. 当前执行状态
 
-本次建立实验时已根据现有 B06 Linux 5.10 source-path 与正文逐项复核实验观察点。当前执行环境没有可控的 Linux v5.10 build tree、匹配 `vmlinux`、可丢弃 QEMU guest 和 kexec/kdump runtime，因此：
+自动验收已经完成工具层闭环：
 
 ```text
-L1：实验步骤已建立；尚未在本次运行中对完整 v5.10 checkout 执行命令
-L2：未执行
-L3：未执行
+checker implementation:                  complete (7 contract groups)
+fixture source:                          complete (1 positive + 8 negative)
+fixture/checker self-test:               9 / 9 PASS, OK, exit code 0
+real Linux v5.10 L1 checker execution:   not executed
+matching-build L2:                       not executed
+isolated-VM L3:                          not executed
 ```
 
-没有填写推测性的符号地址、运行时 uptime、CR3 或 crash 结果。
+fixture 的实际执行记录见 [`selftest-results.md`](selftest-results.md)。当前环境仍没有完整 upstream v5.10 checkout、匹配 `vmlinux` 和安全的 Kexec/Kdump VM，因此没有填写推测性的 L1/L2/L3 结果。
 
-下一最小单元应补齐本实验的 `expected-analysis.md`，把二维 API/purpose、ownership、normal/crash resource policy、prepare/execute 边界和 L1/L2/L3 证据等级固定成独立验收基线；之后再把稳定的 L1 条件转换成自动 source-contract checker。
+下一最小单元是 B06 整章一致性复核：对照正文、source-path、实验、expected analysis、checker 与 self-test，检查 load/execute 生命周期、`kimage` ownership、normal/crash 资源边界、point-of-no-return 和证据等级是否一致；发现具体问题则先修正，否则生成 B06 completion review。
