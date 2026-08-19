@@ -1,8 +1,6 @@
 # B06 收章复核：Kexec 的问题模型与生命周期
 
-本文是 B06《Kexec 解决什么问题》的收章复核。复核目标不是增加新的 Kexec 机制，而是确认正文、Linux 5.10 source-path、实验、expected analysis 与自动 source-contract checker 对同一组事实使用一致的边界，并判断 B06 是否已经达到可以进入 B07 的独立验收标准。
-
-源码基线：upstream Linux v5.10，x86-64。
+本文复核 B06《Kexec 解决什么问题》是否达到独立收章标准。源码事实基线固定为 **upstream Linux v5.10，x86-64**。本文件必须与实验目录中的 `selftest-results.md` 保持同一证据状态；历史 fixture PASS 不得继承给后来修改过的 checker/fixture revision。
 
 复核材料：
 
@@ -14,13 +12,9 @@
 - [`../labs/06-kexec-lifecycle/test_verify_source_contract.py`](../labs/06-kexec-lifecycle/test_verify_source_contract.py)
 - [`../labs/06-kexec-lifecycle/selftest-results.md`](../labs/06-kexec-lifecycle/selftest-results.md)
 
----
+## 1. 内容边界
 
-## 1. 章节边界复核
-
-B06 的问题是：**为什么 Kexec 必须把“准备下一映像”和“真正切换机器状态”拆成两个生命周期，以及 normal/crash image 为什么从准备阶段就具有不同资源假设。**
-
-本章没有把后续内容提前混入主线：
+B06 回答的问题是：为什么 Kexec 要把“准备下一映像”和“真正切换机器状态”拆成两个生命周期，以及 normal/crash image 为什么从准备阶段就具有不同资源假设。
 
 ```text
 B06  生命周期、ownership、normal/crash 前置假设
@@ -30,11 +24,11 @@ B09  purgatory
 B10+ crashkernel、panic/crash execute、capture kernel 与 vmcore
 ```
 
-正文和实验虽然会引用 segment、transition page table、`relocate_kernel` 与 `crashk_res`，但只把它们作为 B06 生命周期边界的证据，没有在本章完整展开后续机制。因此章节职责保持单一。
+正文引用 segment、transition page table、`relocate_kernel` 与 `crashk_res` 时，只把它们作为生命周期边界证据，没有提前完整展开后续章节机制。章节职责仍然清晰。
 
-## 2. load 与 execute 的生命周期一致性
+## 2. load / execute 生命周期
 
-正文、source-path 与实验都采用同一个两阶段模型：
+正文、source-path 与实验采用同一个两阶段模型：
 
 ```text
 healthy old kernel
@@ -49,138 +43,125 @@ later independent event
   → new kernel
 ```
 
-复核中没有发现把 `kexec_load()` / `kexec_file_load()` 成功误写成“CPU 已进入新内核”的位置。
+`machine_kexec_prepare()` 属于 load phase，仍允许准备资源并返回失败；`machine_kexec()` 位于 architecture transition 的 point-of-no-return 一侧。upstream v5.10 x86-64 源码中“不再分配内存/不要失败”的约束注释位于 `machine_kexec()` 定义之前，而不是函数体内。
 
-`machine_kexec_prepare()` 也始终被放在 load phase：它可以准备 x86 transition page-table state，而这一阶段仍允许资源分配、失败和回滚。`machine_kexec()` 则被作为 point-of-no-return 一侧的 architecture transition 入口。Linux v5.10 中“不再分配内存/不要失败”的注释位于 `machine_kexec()` 定义之前；checker 已按这一真实源码布局验证，而不是假定注释位于函数体内。
+## 3. `struct kimage` ownership
 
-这一边界是 B06 最重要的收章条件，当前材料一致。
-
-## 3. `struct kimage` ownership 一致性
-
-所有材料都把 `struct kimage` 解释为跨越 load syscall 生命周期的内核对象，而不是 syscall 栈帧中的临时描述。
-
-成功加载后的 ownership handoff 为：
+成功加载后，prepared image 通过 persistent global slot 跨越 syscall 生命周期：
 
 ```text
 normal image → kexec_image
 crash image  → kexec_crash_image
 ```
 
-traditional/file 两条路径最终都通过 `xchg()` 安装新的 image；被替换的旧 image 才进入释放路径。因此 syscall 返回后，下一映像仍由当前 kernel 的全局 Kexec 状态持有，等待未来 execute/crash event 消费。
+traditional/file 两条路径都通过 `xchg()` 安装新的 image；被替换的旧 image 才进入释放路径。因此 load syscall 返回不等于 execute，也不等于 CPU 已进入新内核。
 
-实验把这一静态 ownership 结论与未来 L3 动态观察分开：`kexec -l` 后旧 kernel 的 uptime 继续增长，只能作为 load/execute 分离的运行时证据，不能反过来代替源码 ownership 核验。
+## 4. load API 与 image purpose 是两个维度
 
-## 4. 加载 API 与 image purpose 的二维模型
-
-B06 全章一致地区分：
+B06 保持以下二维模型：
 
 ```text
-加载 API：
-  kexec_load
-  kexec_file_load
-
-image purpose：
-  KEXEC_TYPE_DEFAULT
-  KEXEC_TYPE_CRASH
+加载 API：kexec_load / kexec_file_load
+image purpose：KEXEC_TYPE_DEFAULT / KEXEC_TYPE_CRASH
 ```
 
-traditional path 可以通过 `KEXEC_ON_CRASH` 表达 crash image；file path 可以通过 `KEXEC_FILE_ON_CRASH` 表达 crash image。因此不存在：
+traditional path 用 `KEXEC_ON_CRASH` 表达 crash purpose，file path 用 `KEXEC_FILE_ON_CRASH` 表达 crash purpose。因此不能把 `kexec_load` 等同 normal Kexec，也不能把 `kexec_file_load` 等同 crash Kexec。实际环境是否允许某种组合还受配置、签名、lockdown、LSM/IMA 和 userspace 工具限制。
 
-```text
-kexec_load      == normal Kexec
-kexec_file_load == crash Kexec
-```
+## 5. normal / crash 的资源边界
 
-这种一一对应关系。
-
-正文、source-path、实验和 checker 均保持这一二维模型。具体发行版是否允许某个组合，还受 `CONFIG_KEXEC`、`CONFIG_KEXEC_FILE`、签名、lockdown、LSM/IMA 和 userspace 工具等条件影响；课程没有把“源码接口可表达”夸大成“任意运行环境都可用”。
-
-## 5. normal/crash 资源边界复核
-
-B06 只选择了足以证明“crash image 从 healthy-time load phase 就已经特殊”的三组资源事实：
+B06 只选取足以证明 crash image 在 healthy-time load phase 已经特殊的三组事实：
 
 1. crash segment destination 受 `crashk_res` 范围约束；
 2. control-page allocation 对 crash image 使用 crash-specific policy；
 3. traditional/file 两条路径都只为 non-crash image 准备 `image->swap_page`。
 
-三项结论在 source-path、正文、实验和 checker 中一致。
+`crashkernel=` 的解析和 reserved-memory 生命周期留给 B10；`swap_page` 的 relocation/copy 具体用途留给 B07/B08。
 
-这里没有把 `crashk_res` 的建立过程提前写成 B06 内容；`crashkernel=` 参数解析和 reserved-memory 生命周期留给 B10。也没有把 `swap_page` 误解成普通 VM swap；它只作为后续 Kexec relocation/copy 算法所需的内部对象出现，具体用途留给 B07/B08。
+## 6. upstream Linux v5.10 事实基线
 
-## 6. normal execute 与 crash execute 的前置假设
-
-B06 对两条 execute 路径只建立前置假设，而没有提前展开完整调用链：
+当前 checker 的实现事实已重新回到 upstream `v5.10` tag 核验。该 tag 对应 commit：
 
 ```text
-normal execute
-  旧 kernel 被假定仍然健康，可以按计划收缩 ordinary activity
-
-crash execute
-  生产 kernel 已发生 fatal failure，不能把普通锁、调度、workqueue、设备 shutdown
-  或普通内存分配继续当作可靠前提
+2c85ebc57b3e1817b6ce1a6b703928e113a90442
 ```
 
-因此 crash image 必须在健康时期预留、加载和安装。这个结论与 Kdump 后续课程衔接，但本章没有把 `panic()`、`crash_kexec()`、CPU stopping、`elfcorehdr` 或 capture kernel 混入 B06 主线。
+B06 人工复核使用的四个源码 blob 为：
 
-## 7. 自动验收与证据等级复核
+```text
+kernel/kexec.c
+  c82c6c06f0518f3591de33431904d60175e69bc2
+kernel/kexec_file.c
+  e21f6b9234f7a2dbcfe17df61d1611b5d3bbb9d7
+kernel/kexec_core.c
+  8798a8183974e3b3d52ac53dc4b981f4055f0b52
+arch/x86/kernel/machine_kexec_64.c
+  a29a44a98e5bef10751af769bd198d783e23b9fd
+```
 
-B06 当前自动 checker 固定 7 组 L1 source-contract：
+复核确认：
 
-1. traditional/file API 与 normal/crash purpose 维度分离；
-2. `struct kimage` 通过 `xchg()` 安装到 persistent global slot；
-3. crash destination 受 `crashk_res` 约束；
-4. crash-specific control-page policy；
-5. traditional/file path 的 normal-only `swap_page`；
-6. `machine_kexec_prepare()` 位于 image installation 之前；
-7. x86 prepare 建立 transition page-table state，且 point-of-no-return 注释与 `machine_kexec()` 定义关系符合 Linux v5.10 源码布局。
+- `kimage_alloc_init()` / `kimage_file_alloc_init()` 返回 `int`，通过 `struct kimage **` 输出 image；
+- file loader 先选择 normal slot，再在 crash flag 存在时覆盖为 crash slot，不能强制套用 traditional loader 的文本排列；
+- `sanity_check_segment_list()` 在 upstream v5.10 中不是 `static`；
+- `kimage_alloc_control_pages()` 使用 `switch (image->type)`，`KEXEC_TYPE_CRASH` case 调用 crash-specific allocator；
+- 两条 loader 都在 persistent install 之前调用 `machine_kexec_prepare(image)`；
+- x86-64 `machine_kexec_prepare()` 调用 `init_pgtable()`，point-of-no-return 约束位于 `machine_kexec()` 定义之前。
 
-fixture suite 已实际执行：
+这些属于 **人工 upstream-v5.10 L1 源码复核**，不能冒充自动 checker PASS。
+
+## 7. 当前自动验收状态
+
+B06 checker 固定 7 组 source-contract。synthetic fixture 已扩展并收口为：
 
 ```text
 1 个完整正例
-8 个针对性负例
-Ran 9 tests
-OK
-exit code 0
+21 个针对性负例
+共 22 cases
 ```
 
-完整正例返回全部 7 组 contract；负例分别破坏上述关键约束并被 checker 拒绝。
-
-必须继续保持证据边界：
+当前 exact blobs：
 
 ```text
-fixture self-test        工具证据，已完成
-真实 upstream v5.10     L1，当前未执行 checker CLI
-匹配 vmlinux             L2，当前未执行
-隔离 Kexec/Kdump VM      L3，当前未执行
+verify_source_contract.py
+  5c89b67628cf55560089656d5b65e80ff74c556f
+
+test_verify_source_contract.py
+  f18918cfbe0b01ffba59be3ac083a9971295a2f8
 ```
 
-因此 B06 可以说“checker/fixture 工具闭环已通过”，不能说“真实 v5.10 L1/L2/L3 已全部通过”。当前 README 与 expected analysis 对这一点表述一致。
+历史上较早 revision 曾实际得到 `Ran 9 tests / OK / exit code 0`，但 checker/fixture 后续因 upstream-v5.10 事实纠偏和负例覆盖扩展而发生变化。因此该历史结果 **不能继承** 给当前 22-case exact pair。
 
-## 8. 配置、术语和调用方向检查
+当前证据状态是：
 
-本次收章复核重点检查了以下容易出错的表达：
+```text
+当前 22-case exact-pair self-test：          未执行
+当前 22-case PASS：                          未建立
+upstream v5.10 人工 L1 事实复核：            已完成
+完整 upstream v5.10 自动 L1 7/7：            未建立
+匹配 vmlinux L2：                            未执行
+隔离 Kexec/Kdump VM L3：                     未执行
+```
 
-- `CONFIG_KEXEC_CORE`、`CONFIG_KEXEC`、`CONFIG_KEXEC_FILE`、`CONFIG_CRASH_DUMP` 被作为需要区分的配置条件，而不是假定所有路径无条件存在；
-- traditional/file 表示加载接口，normal/crash 表示映像用途；
-- `machine_kexec_prepare()` 是 load-side architecture preparation，不是 execute；
-- `machine_kexec()` 是从旧内核进入最小 transition 环境的方向，不是新内核回调旧内核；
-- `crashk_res` 在 B06 中只承担 crash destination constraint 的事实角色；
-- `swap_page` 没有与普通内存管理 swap 混淆；
-- “load success”“image installed”“execute event”“new kernel running”保持为不同状态。
+fixture coverage 已经覆盖 7 组 checker contract 的独立 assertion；不再为了增加 case 数继续扩 synthetic fixture。下一步必须转向真实执行证据。
 
-未发现需要阻止收章的新事实冲突。
+## 8. 执行环境与成本边界
 
-## 9. B06 收章结论
+当前可用执行环境此前在 materialize GitHub / raw GitHub 文件时遇到 DNS 解析失败，因此不能把“connector 能读取源码”误写成“本地 Python 已执行 exact committed files”。这是执行环境 blocker，不是 checker failure，也不是 upstream v5.10 source failure。
 
-B06 已满足当前课程的独立验收标准：
+`.github/workflows/boot-crash-b06-selftest.yml` 只允许手工触发，并要求 `[self-hosted, linux, x64, kernel-course]` runner。当前没有额外 runner 预算，不应为了取得 PASS 静默改用可能产生费用的 GitHub-hosted runner。
 
-- 已有 Linux 5.10 source-path；
-- 已有从问题背景到设计边界的正式教程；
-- 已有对应实验和 expected analysis；
-- 已有 7 组自动 L1 source-contract checker；
-- 已有 1 正 + 8 负 fixture，并实际执行 9 / 9 PASS、exit code 0；
-- 正文、源码记录、实验和自动验收对 load/execute、ownership、API/purpose、normal/crash resource policy 与 point-of-no-return 使用一致模型；
-- 未执行的真实 v5.10 L1、匹配构建 L2 和隔离 VM L3 均被明确标记，没有伪造成已完成证据。
+## 9. 收章判定
 
-因此 B06 内容层面可以收章。下一步应更新 `boot-crash/README.md`，把 B06 标记为【已完成】并接入本 completion review；README 收口完成后再进入 B07，对 Kexec image/segments 的实际装载机制做 Linux 5.10 源码事实核验。
+**B06 当前不能维持“已完成/已收章”的判定。** 内容主体、source-path、实验模型、7 组 checker 和 22-case synthetic coverage 已建立，但独立验收仍缺两个硬门槛：
+
+```text
+A. 对当前 exact checker/fixture pair 执行：
+   python3 -m unittest -v test_verify_source_contract.py
+   要求：22 tests / OK / exit code 0
+
+B. 用同一个 verify_source_contract.py 对 upstream Linux v5.10
+   commit 2c85ebc57b3e1817b6ce1a6b703928e113a90442 执行：
+   要求：7 组 source-contract 全部 PASS
+```
+
+只有 A、B 都建立可复核执行证据后，才能恢复 B06 的【已完成】状态并进入 B07。任一执行失败时，具体 failure 本身就是下一最小修正单元，必须回到 upstream v5.10 源码判断是 checker、fixture 还是课程结论需要修正，不能通过放宽 matcher 获得表面 PASS。
