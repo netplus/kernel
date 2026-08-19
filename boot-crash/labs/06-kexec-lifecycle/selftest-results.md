@@ -1,23 +1,41 @@
 # B06 source-contract checker self-test execution record
 
-This file records **tool execution evidence** for the B06 checker fixtures. It is not Linux v5.10 L1 source evidence and must not be used as a substitute for running `verify_source_contract.py` against a real upstream v5.10 checkout.
+This file records **tool execution evidence** for the B06 checker fixtures. It is not Linux v5.10 L1 source evidence and must not be used as a substitute for running `verify_source_contract.py` against a real upstream Linux v5.10 checkout.
 
-## 2026-08-19 fixture execution
+## 1. Upstream v5.10 revalidation after checker correction
 
-The current GitHub versions of:
+The current B06 checker was corrected after re-reading upstream Linux v5.10 Kexec sources. The correction aligned the checker/fixture model with the real v5.10 source shape, including these facts:
 
 ```text
-boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
-boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
+kernel/kexec.c
+  kimage_alloc_init() returns int and returns the image through
+  struct kimage **rimage.
+
+kernel/kexec_file.c
+  kimage_file_alloc_init() likewise returns int through an out-parameter.
+  kexec_file_load() initializes dest_image to &kexec_image and overrides it
+  with &kexec_crash_image when KEXEC_FILE_ON_CRASH is set.
+
+kernel/kexec_core.c
+  sanity_check_segment_list() is a global int function in upstream v5.10,
+  not a static function.
+
+arch/x86/kernel/machine_kexec_64.c
+  the "Do not allocate memory ... point of no return" comment appears
+  immediately before machine_kexec(), not inside the function body.
 ```
 
-were fetched in the same maintenance run and materialized together in an isolated Python environment. The fixture suite was then executed with the same command used by the repository workflow:
+These facts were rechecked against upstream Linux v5.10 source during the maintenance run that corrected the checker. They are source facts, not conclusions imported from a secondary web source.
+
+## 2. Earlier 9-test execution is historical tool evidence
+
+An earlier revision of the checker/fixture pair was materialized together in an isolated Python environment and executed with:
 
 ```bash
 python3 -m unittest -v test_verify_source_contract.py
 ```
 
-Observed result:
+The observed result for that earlier revision was:
 
 ```text
 test_complete_fixture_passes_all_contracts ... ok
@@ -37,45 +55,81 @@ OK
 
 Process exit code: `0`.
 
-The suite therefore establishes tool evidence for one complete positive fixture and eight negative fixtures. The positive fixture returns all seven B06 contract groups; each negative fixture demonstrates rejection when one targeted source contract is broken.
+This remains useful historical evidence that the fixture framework itself can execute, but **it must not be described as a PASS for the current corrected checker/fixture pair**. The checker and positive fixture were subsequently changed to match upstream Linux v5.10 more precisely, so the current pair requires a fresh execution.
 
-The execution environment emitted an unrelated spreadsheet-runtime warmup warning before the unittest output. It did not affect Python unittest execution: all nine tests completed and the test process returned exit code 0.
+## 3. Current exact-pair status
 
-## Provenance boundary
+The repository currently contains:
 
-This result is stronger than merely inspecting the fixture source, but it must not be overstated. The files were fetched from GitHub and executed together in an isolated environment; this record is **fixture/checker tool evidence**. It is not a run of `verify_source_contract.py` against an upstream Linux v5.10 source tree, and it is not L2 or L3 evidence.
+```text
+boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
+boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
+```
 
-The repository also contains:
+The current fixture suite still represents:
+
+```text
+1 complete positive fixture
+8 targeted negative fixtures
+7 B06 source-contract groups
+```
+
+But after the upstream-v5.10-driven checker/fixture correction, the exact current pair has **not yet obtained a directly observed unittest PASS** in an environment that can execute the repository files unchanged.
+
+Therefore the current evidence status is:
+
+```text
+current fixture source present:                         yes
+current corrected checker source present:               yes
+historical earlier-revision 9/9 PASS observed:          yes
+current corrected exact-pair self-test executed:        no
+current corrected exact-pair PASS observed:             no
+current corrected exact-pair unittest PASS count:       not established
+current corrected exact-pair unittest exit code:        not established
+manual upstream Linux v5.10 source revalidation:        yes
+automated checker against full upstream v5.10 tree:     no
+matching-vmlinux L2 executed:                            no
+Kexec/Kdump VM L3 executed:                              no
+```
+
+## 4. Why the distinction matters
+
+A fixture PASS is tied to the exact checker and fixture revisions that were executed. Once either file changes, an older PASS cannot automatically be carried forward.
+
+This matters especially here because the corrections were not cosmetic: they changed the checker model to match real upstream Linux v5.10 function signatures and source ordering. Treating the earlier 9/9 result as proof for the corrected pair would create false provenance and could hide a regression introduced by the correction itself.
+
+Likewise, even a fresh current-pair fixture PASS would only be **tool evidence**. The real Linux v5.10 L1 acceptance still requires running the checker against a complete upstream v5.10 source tree, or equivalently verifying every contract directly against that tree.
+
+## 5. CI path and cost boundary
+
+The repository contains:
 
 ```text
 .github/workflows/boot-crash-b06-selftest.yml
 ```
 
-which checks out the repository and runs the same unittest command. A GitHub Actions job result is useful additional provenance, but it is no longer required to establish that the fixture/checker pair itself executes successfully because this run produced a directly observed 9-test PASS.
+which is intended to checkout the repository and run the fixture suite against exact committed files. However, a workflow definition is not a PASS result by itself.
 
-## Evidence status
-
-```text
-fixture source present:                    yes
-fixture/checker pair executed together:    yes
-fixture self-test PASS observed:           yes
-unittest PASS count:                       9 / 9
-positive / negative fixtures:              1 / 8
-unittest exit code:                        0
-real Linux v5.10 L1 checker executed:      no
-matching-vmlinux L2 executed:              no
-Kexec/Kdump VM L3 executed:                no
-```
-
-## Next acceptance action
-
-The fixture/checker tool-evidence unit is complete. The next course-maintenance step is to update the B06 experiment README and expected-analysis state so that they record the observed `9 / 9`, `OK`, exit-code-0 result while preserving the evidence boundary:
+The project currently has no additional runner budget. Do not solve this evidence gap by assuming a paid GitHub-hosted runner. Prefer, in order:
 
 ```text
-fixture self-test        = tool evidence, completed
-real upstream v5.10 run  = L1, not yet executed
-matching vmlinux         = L2, not yet executed
-isolated Kexec/Kdump VM  = L3, not yet executed
+1. an already available local execution environment;
+2. a jointly configured self-hosted GitHub Actions runner;
+3. another zero-new-cost environment that executes the exact committed files.
 ```
 
-A future environment with a complete upstream Linux v5.10 checkout should run `verify_source_contract.py` against that tree. Matching-build ELF/assembly and isolated VM runtime observations remain enhancement evidence rather than prerequisites for claiming the fixture self-test itself complete.
+Any runner used for repository automation should have explicit permissions, isolation, labels and workspace cleanup policy.
+
+## 6. Next acceptance action
+
+The next B06 acceptance unit is deliberately narrow:
+
+```text
+A. execute the current exact checker/fixture pair unchanged;
+B. require 9 tests, OK, exit code 0;
+C. execute verify_source_contract.py against a complete upstream Linux v5.10 tree;
+D. require all 7 source-contract groups to PASS;
+E. only then update README.md / expected-analysis.md to restore PASS status.
+```
+
+If either A/B or C/D fails, the failure itself becomes the next correction unit. Do not bypass it by weakening the checker or by copying conclusions from online material.
