@@ -208,7 +208,34 @@ Preferred execution order remains:
 
 A self-hosted runner must be treated as infrastructure: use a dedicated low-privilege account or VM where practical, restrict repository access, keep the `kernel-course` label explicit, and clean the work directory between jobs. Do not expose unrelated credentials to course test jobs.
 
-## 7. Next acceptance action
+## 7. Repeated execution attempt on 2026-08-19
+
+A fresh attempt was made from the current local execution environment to fetch the **exact committed checker and fixture** plus the four upstream Linux `v5.10` source files needed by the checker. The intended sequence was:
+
+```text
+curl -fsSL https://raw.githubusercontent.com/netplus/kernel/main/boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py ...
+curl -fsSL https://raw.githubusercontent.com/netplus/kernel/main/boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py ...
+curl -fsSL https://raw.githubusercontent.com/torvalds/linux/v5.10/kernel/kexec.c ...
+curl -fsSL https://raw.githubusercontent.com/torvalds/linux/v5.10/kernel/kexec_file.c ...
+curl -fsSL https://raw.githubusercontent.com/torvalds/linux/v5.10/kernel/kexec_core.c ...
+curl -fsSL https://raw.githubusercontent.com/torvalds/linux/v5.10/arch/x86/kernel/machine_kexec_64.c ...
+python3 -m unittest -v test_verify_source_contract.py
+python3 verify_source_contract.py <materialized-v5.10-tree>
+```
+
+The first network operation failed before any test could start:
+
+```text
+curl: (6) Could not resolve host: raw.githubusercontent.com
+```
+
+This independently reproduces the earlier DNS/network limitation seen for `github.com`. It is an **execution-environment blocker**, not a checker failure and not a Linux v5.10 source failure. Therefore this run must not record either 9/9 fixture PASS or 7/7 upstream-source PASS.
+
+The GitHub connector remains able to read repository content and upstream `v5.10` source, so source review and repository maintenance can continue. What remains unavailable here is a filesystem-materialized exact revision that Python can execute end to end.
+
+When an execution-capable zero-new-cost environment is available, use the exact current blobs already recorded above and require both commands to return exit code 0 before changing the evidence state to PASS.
+
+## 8. Next acceptance action
 
 The next minimum acceptance unit remains two-part and must use the latest corrected checker:
 
