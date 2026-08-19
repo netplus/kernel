@@ -95,9 +95,11 @@ def check(root: Path) -> list[str]:
     require(sanity, r"crashk_res\.end", "crash reserved range end")
     passed.append("crash segment destinations are constrained by crashk_res")
 
-    # 4. Control-page allocation has a crash-specific policy.
+    # 4. Control-page allocation has a crash-specific policy. Upstream v5.10
+    # dispatches with switch (image->type), not an if (type == CRASH) branch.
     control = function_body(core, r"struct\s+page\s*\*kimage_alloc_control_pages\s*\(", "kimage_alloc_control_pages")
-    require(control, r"image->type\s*==\s*KEXEC_TYPE_CRASH", "crash control-page branch")
+    require(control, r"switch\s*\(\s*image->type\s*\)", "control-page type dispatch")
+    require(control, r"case\s+KEXEC_TYPE_CRASH\s*:", "crash control-page case")
     require(control, r"kimage_alloc_crash_control_pages\s*\(", "crash control-page allocator")
     passed.append("normal/crash control-page allocation policy differs")
 
