@@ -4,7 +4,8 @@
 The fixtures test the checker itself. They are tool evidence, not a
 substitute for running verify_source_contract.py against a real v5.10 tree.
 The positive fixtures deliberately mirror the relevant upstream v5.10
-function signatures and normal/crash destination-slot ordering.
+function signatures, control-page dispatch, and normal/crash destination-slot
+ordering.
 """
 
 from __future__ import annotations
@@ -93,9 +94,16 @@ int sanity_check_segment_list(struct kimage *image)
 }
 struct page *kimage_alloc_control_pages(struct kimage *image, unsigned int order)
 {
-    if (image->type == KEXEC_TYPE_CRASH)
-        return kimage_alloc_crash_control_pages(image, order);
-    return alloc_pages(GFP_KERNEL, order);
+    struct page *pages = NULL;
+    switch (image->type) {
+    case KEXEC_TYPE_DEFAULT:
+        pages = kimage_alloc_normal_control_pages(image, order);
+        break;
+    case KEXEC_TYPE_CRASH:
+        pages = kimage_alloc_crash_control_pages(image, order);
+        break;
+    }
+    return pages;
 }
 '''
 
@@ -149,7 +157,7 @@ class B06CheckerTests(unittest.TestCase):
         self.reject({"kernel/kexec_core.c": CORE.replace("crashk_res.end", "ULONG_MAX")})
 
     def test_rejects_shared_control_page_allocator(self) -> None:
-        self.reject({"kernel/kexec_core.c": CORE.replace("return kimage_alloc_crash_control_pages(image, order);", "return alloc_pages(GFP_KERNEL, order);")})
+        self.reject({"kernel/kexec_core.c": CORE.replace("pages = kimage_alloc_crash_control_pages(image, order);", "pages = kimage_alloc_normal_control_pages(image, order);")})
 
     def test_rejects_crash_swap_page_allocation(self) -> None:
         self.reject({"kernel/kexec.c": TRADITIONAL.replace("if (!kexec_on_panic)\n        image->swap_page", "if (kexec_on_panic)\n        image->swap_page")})
