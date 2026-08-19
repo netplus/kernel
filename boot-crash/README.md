@@ -224,9 +224,39 @@ B05 到“同一个 PID 1 成功 exec 用户态 init”结束。用户态 `_star
 
 # 第二部分：Kexec
 
-## B06：Kexec 解决什么问题
+## B06：Kexec 解决什么问题【已完成】
 
-建立普通 reboot 与 Kexec 的差异，并区分 normal kexec 与 crash kexec。重点理解为什么“不重新经过 firmware”意味着旧内核必须主动为新内核准备可接受的 CPU、内存和映像状态。
+本章建立 firmware reboot、normal Kexec 与 crash Kexec 的状态差异，并解释为什么 Kexec 必须把“准备下一映像”和“真正切换机器状态”拆成两个生命周期。重点不是把 Kexec 简化为一次跳转，而是理解旧内核为什么必须在仍有完整运行能力时准备好未来 transition 所需的对象和机器状态。
+
+核心范围：
+
+- load/prepare 与 execute/transition 是两个独立生命周期，load syscall 成功不表示 CPU 已进入新内核；
+- `struct kimage` 通过 `xchg()` 安装到 `kexec_image` / `kexec_crash_image` 后跨越 syscall 生命周期，由旧内核继续持有；
+- `kexec_load` / `kexec_file_load` 是加载 API 维度，normal / crash 是 image-purpose 维度，两者不存在一一对应关系；
+- crash image 从 healthy-time load phase 就受 `crashk_res` destination、crash-specific control-page policy 和无 normal `swap_page` 等不同资源约束；
+- `machine_kexec_prepare()` 属于仍可失败的 load-side architecture preparation，x86-64 在这里准备 transition page-table state；
+- `machine_kexec()` 位于 point-of-no-return 一侧，Linux 5.10 的“不再分配内存/不要失败”注释位于该函数定义之前；
+- B06 只建立 normal/crash execute 的前置假设，不提前展开 B07 的 segment/page-list、B08 的 relocation、B09 purgatory 或 B10+ 的完整 Kdump 路径。
+
+已完成内容：
+
+- [正式教程：Kexec 为什么需要独立的加载与切换生命周期](docs/06-kexec-why-and-lifecycle.md)
+- [Linux 5.10 Kexec 生命周期与 `kimage` 源码事实核验](source-paths/06-kexec-model-linux-5.10.md)
+- [实验：Kexec load/execute 生命周期与 normal/crash 资源边界](labs/06-kexec-lifecycle/)
+- [B06 收章复核](docs/06-b06-completion-review.md)
+
+实验已建立 7 组 source-contract checker；fixture self-test 已实际执行 9 个 unittest（1 个完整正例 + 8 个负例），全部通过，exit code 0。fixture self-test 属于工具证据；真实 upstream Linux v5.10 checkout 上的 checker CLI、匹配 `vmlinux` 的 L2 和隔离 Kexec/Kdump VM 的 L3 仍属于未执行增强证据，不冒充为已完成结果。
+
+建议源码：
+
+```text
+kernel/kexec.c
+kernel/kexec_core.c
+kernel/kexec_file.c
+arch/x86/kernel/machine_kexec_64.c
+```
+
+B06 到“下一映像已经准备并由旧内核持有，未来 execute/crash event 才消费它”的生命周期模型结束。segment/page-list 与 file loader 的具体装载机制从 B07 开始展开。
 
 ## B07：Kexec 映像的加载
 
@@ -328,8 +358,13 @@ fatal error → panic → stop / notify other CPUs → save crash CPU state
 进入本目录前，应先掌握 assembly 中的寄存器、取址、栈、ABI 和控制流；正常启动 B00–B05 与 memory 中的早期页表、内存布局和 memblock 可以交叉学习。
 
 ```text
-B00～B05  x86_64 正常启动
-B06～B09  Kexec
-B10～B15  双内核 Kdump 与 vmcore 生成
-B16～B18  vmcore 分析、符号和失效场景
+assembly 基础
+  ↓
+boot-crash B00–B05 正常启动
+  ↓
+boot-crash B06–B09 Kexec
+  ↓
+boot-crash B10–B18 Kdump / vmcore
+  ↓
+integrated-paths 完整路径
 ```
