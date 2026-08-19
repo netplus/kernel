@@ -16,7 +16,25 @@ B06 使用四级证据，不能互相冒充。
 
 当前 `verify_source_contract.py` 固定 7 组 L1 契约；`test_verify_source_contract.py` 包含 1 个完整正例和 8 个负例。工具证据只回答 checker 是否能接受满足约束的合成 fixture、拒绝被故意破坏的 fixture，不能证明真实 Linux v5.10 源码满足这些契约。
 
-必须按 revision 记录工具证据。较早 checker/fixture revision 曾实际得到：
+必须按 revision 记录工具证据。较早 checker/fixture revision 曾实际得到 9/9 PASS，但随后依据 upstream Linux v5.10 源码对 checker 与 positive fixture 做了实质修正，因此旧 PASS 不作为当前版本证据。
+
+当前修正版已经重新取得 exact-pair 执行证据。执行前先按 Git blob 算法校验本地 materialized bytes 与仓库 blob SHA 完全一致：
+
+```text
+verify_source_contract.py
+  cd38c6c849d8c1d33449b4d01f0039c0de23c1bc
+
+test_verify_source_contract.py
+  74dc63d9e4bba24c5278224513b5a640be267478
+```
+
+随后实际执行：
+
+```bash
+python3 -m unittest -v test_verify_source_contract.py
+```
+
+得到：
 
 ```text
 Ran 9 tests
@@ -24,41 +42,22 @@ OK
 exit code 0
 ```
 
-随后依据 upstream Linux v5.10 源码对 checker 与 positive fixture 做了**实质修正**：
-
-```text
-kernel/kexec.c
-  kimage_alloc_init() 返回 int，通过 struct kimage **rimage 输出 image
-
-kernel/kexec_file.c
-  kimage_file_alloc_init() 同样采用 int + struct kimage **
-  kexec_file_load() 先令 dest_image = &kexec_image，
-  KEXEC_FILE_ON_CRASH 时再覆盖为 &kexec_crash_image
-
-kernel/kexec_core.c
-  sanity_check_segment_list() 在 upstream v5.10 中是全局 int 函数，不是 static
-
-arch/x86/kernel/machine_kexec_64.c
-  point-of-no-return / 不再分配内存的注释位于 machine_kexec() 定义之前
-```
-
-因此旧的 9/9 PASS **不能继承给当前修正版**。当前准确状态为：
+因此当前准确状态为：
 
 ```text
 current corrected checker source:               present
 current corrected fixture source:               present
-historical earlier-revision 9/9 PASS:            observed
-current corrected exact-pair self-test:          not executed
-current corrected exact-pair PASS:               not established
-current corrected exact-pair PASS count:         not established
-current corrected exact-pair exit code:          not established
+current corrected exact-pair self-test:          executed
+current corrected exact-pair PASS:               established
+current corrected exact-pair PASS count:         9/9
+current corrected exact-pair exit code:          0
 ```
 
 详细 provenance 见 [`selftest-results.md`](selftest-results.md)。
 
 ### L1：真实 upstream Linux v5.10 source contract
 
-L1 必须在完整 upstream Linux v5.10 tree 上执行当前 checker，或逐项人工核对同一组契约。上述 checker 修正点已经人工回到 v5.10 源码核实，但当前 checker 尚未在完整 tree 上取得自动 PASS。因此不能把“人工核过修正点”写成“7 组 full-tree checker 已通过”。
+L1 必须在完整 upstream Linux v5.10 tree 上执行当前 checker，或逐项人工核对同一组契约。checker 修正点已经人工回到 v5.10 源码核实，但当前 checker 尚未在完整 tree 上取得自动 PASS。因此不能把“人工核过修正点”写成“7 组 full-tree checker 已通过”。
 
 ### L2：匹配构建
 
@@ -155,7 +154,7 @@ fatal event later
 6. load path 中 `machine_kexec_prepare()` 位于 image installation 之前；
 7. x86 `machine_kexec_prepare()` 预先建立 transition page-table state，且 point-of-no-return 注释与 `machine_kexec()` 定义的位置关系符合 upstream v5.10。
 
-fixture suite 仍是 1 个完整正例 + 8 个负例，但当前修正版尚未重新取得 exact-pair PASS。历史 9/9 PASS 只能作为旧 revision 的工具证据。
+fixture suite 为 1 个完整正例 + 8 个负例；当前 exact pair 已重新执行并取得 9/9 PASS。该结果只证明 checker 自身，不替代完整 upstream tree 的 L1 自动验收。
 
 ---
 
@@ -179,22 +178,20 @@ B06 在当前层次必须能够由正文、upstream v5.10 source-path 和实验�
 B06 source-path / tutorial / experiment model:          present
 7-group L1 checker:                                     present
 1 positive + 8 negative fixtures:                       present
-historical earlier-revision fixture PASS:               9/9, exit 0
-current corrected exact-pair fixture PASS:              not established
+current corrected exact-pair fixture PASS:              9/9, exit 0
 manual upstream-v5.10 correction-point revalidation:    done
 full upstream-v5.10 automated L1 checker PASS:          not established
 matching-vmlinux L2:                                    not executed
 isolated-VM L3:                                         not executed
 ```
 
-下一独立验收单元必须按顺序完成：
+当前工具证据已经恢复。下一独立验收单元只剩真实 upstream tree 的自动 L1：
 
 ```text
-A. 原样执行当前 exact checker/fixture pair；
-B. 要求 9 tests、OK、exit code 0；
-C. 在完整 upstream Linux v5.10 tree 上执行同一 checker；
-D. 要求全部 7 组 source-contract PASS；
-E. 只有 A-D 都成立后，才能恢复当前 revision 的 PASS 状态并进入 B06 completion review。
+A. 在完整 upstream Linux v5.10 tree 上执行当前 verify_source_contract.py；
+B. 要求全部 7 组 source-contract PASS；
+C. 记录 upstream tag/commit 与 checker blob SHA；
+D. 只有 A-C 成立后，才能进入 B06 completion review。
 ```
 
-若任一测试失败，失败本身就是下一修正单元。不得通过放宽契约、引用网上结论或沿用旧 revision 的 PASS 绕过失败。
+若 full-tree checker 失败，失败本身就是下一修正单元。不得通过放宽契约、引用网上结论或沿用人工推断绕过失败。
