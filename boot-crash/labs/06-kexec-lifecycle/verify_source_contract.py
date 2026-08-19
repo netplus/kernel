@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Check the Linux v5.10 source contracts used by boot-crash B06.
 
-This is deliberately an L1 source checker.  It does not prove that a
+This is deliberately an L1 source checker. It does not prove that a
 particular distro build enables Kexec, nor does it prove runtime transition
-state.  Run it against an upstream Linux v5.10 source checkout.
+state. Run it against an upstream Linux v5.10 source checkout.
 """
 
 from __future__ import annotations
@@ -72,27 +72,24 @@ def check(root: Path) -> list[str]:
     require(file_load, r"KEXEC_FILE_ON_CRASH", "file crash-purpose flag")
     passed.append("load API and normal/crash purpose remain independent")
 
-    # 2. Both loaders select a persistent global slot and install the image
-    # with xchg(), so successful load is not itself the control transfer.
+    # 2. Both loaders select both persistent global slots and install the image
+    # with xchg(). Do not impose source ordering on the two slot assignments:
+    # v5.10 traditional load spells crash first, while file load initializes
+    # the normal slot first and then overrides it for crash mode.
     traditional_load = function_body(traditional, r"static\s+int\s+do_kexec_load\s*\(", "do_kexec_load")
-    require(
-        traditional_load,
-        r"dest_image\s*=\s*&kexec_crash_image\s*;.*?dest_image\s*=\s*&kexec_image\s*;",
-        "traditional normal/crash destination slots",
-    )
+    require(traditional_load, r"dest_image\s*=\s*&kexec_crash_image\s*;", "traditional crash destination slot")
+    require(traditional_load, r"dest_image\s*=\s*&kexec_image\s*;", "traditional normal destination slot")
     require(traditional_load, r"xchg\s*\(\s*dest_image\s*,\s*image\s*\)", "traditional image installation")
 
     file_syscall = function_body(file_load, r"SYSCALL_DEFINE5\s*\(\s*kexec_file_load\b", "kexec_file_load")
-    require(
-        file_syscall,
-        r"dest_image\s*=\s*&kexec_crash_image\s*;.*?dest_image\s*=\s*&kexec_image\s*;",
-        "file normal/crash destination slots",
-    )
+    require(file_syscall, r"dest_image\s*=\s*&kexec_crash_image\s*;", "file crash destination slot")
+    require(file_syscall, r"dest_image\s*=\s*&kexec_image\s*;", "file normal destination slot")
     require(file_syscall, r"xchg\s*\(\s*dest_image\s*,\s*image\s*\)", "file image installation")
     passed.append("struct kimage ownership transfers to persistent global slot")
 
     # 3. Crash image destinations are constrained by crashk_res at load time.
-    sanity = function_body(core, r"static\s+int\s+sanity_check_segment_list\s*\(", "sanity_check_segment_list")
+    # In upstream v5.10 sanity_check_segment_list() is global, not static.
+    sanity = function_body(core, r"int\s+sanity_check_segment_list\s*\(", "sanity_check_segment_list")
     require(sanity, r"image->type\s*==\s*KEXEC_TYPE_CRASH", "crash segment branch")
     require(sanity, r"crashk_res\.start", "crash reserved range start")
     require(sanity, r"crashk_res\.end", "crash reserved range end")
@@ -105,13 +102,14 @@ def check(root: Path) -> list[str]:
     passed.append("normal/crash control-page allocation policy differs")
 
     # 5. Both load APIs allocate swap_page only for non-crash images.
-    traditional_alloc = function_body(traditional, r"static\s+struct\s+kimage\s*\*kimage_alloc_init\s*\(", "kimage_alloc_init")
+    # Upstream v5.10 kimage_alloc_init() returns int via an out-parameter.
+    traditional_alloc = function_body(traditional, r"static\s+int\s+kimage_alloc_init\s*\(", "kimage_alloc_init")
     require(
         traditional_alloc,
         r"if\s*\(\s*!kexec_on_panic\s*\).*?image->swap_page\s*=\s*kimage_alloc_control_pages\s*\(",
         "traditional normal-only swap_page",
     )
-    file_alloc = function_body(file_load, r"static\s+struct\s+kimage\s*\*kimage_file_alloc_init\s*\(", "kimage_file_alloc_init")
+    file_alloc = function_body(file_load, r"static\s+int\s+kimage_file_alloc_init\s*\(", "kimage_file_alloc_init")
     require(
         file_alloc,
         r"if\s*\(\s*!kexec_on_panic\s*\).*?image->swap_page\s*=\s*kimage_alloc_control_pages\s*\(",
@@ -139,7 +137,7 @@ def check(root: Path) -> list[str]:
     )
     passed.append("machine_kexec_prepare belongs to load/prepare phase")
 
-    # 7. x86 machine_kexec_prepare builds transition mappings.  Linux v5.10
+    # 7. x86 machine_kexec_prepare builds transition mappings. Linux v5.10
     # documents the point-of-no-return rule in the comment immediately before
     # machine_kexec(), so check that source ordering rather than pretending the
     # comment lives inside the function body.
