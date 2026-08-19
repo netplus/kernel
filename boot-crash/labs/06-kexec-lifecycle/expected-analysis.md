@@ -17,7 +17,7 @@
 
 ## 1. 首先固定证据等级
 
-B06 现在使用四级证据。最前面增加“工具证据”，目的是把 checker 自身是否可靠与 Linux 5.10 源码事实分开；四级证据不能互相冒充。
+B06 使用四级证据。最前面增加“工具证据”，目的是把 checker 自身是否可靠与 Linux 5.10 源码事实分开；四级证据不能互相冒充。
 
 ### 工具证据：checker / fixture 自身
 
@@ -32,28 +32,32 @@ checker 能否拒绝故意破坏约束的 fixture？
 
 它不能回答真实 Linux v5.10 源码是否满足这些契约。
 
-仓库已经建立 exact-commit GitHub Actions 执行入口：
-
-```text
-.github/workflows/boot-crash-b06-selftest.yml
-```
-
-workflow 会 checkout 仓库实际提交内容并直接运行：
+2026-08-19 已将 GitHub 当前版本的 checker 与 fixture 在同一维护运行中取回，并在隔离 Python 环境执行：
 
 ```bash
-cd boot-crash/labs/06-kexec-lifecycle
 python3 -m unittest -v test_verify_source_contract.py
 ```
 
-截至当前验收记录，**尚未取得可验证的 9-case PASS / exit code 0 结果**。当前 GitHub 工具路径不能可靠列出该 `push`/`workflow_dispatch` workflow 的 run 结果，本地执行环境又无法解析 `github.com` 取得 checkout。因此必须保持：
+实际结果为：
+
+```text
+Ran 9 tests
+
+OK
+```
+
+进程退出码为 `0`。因此当前工具证据状态为：
 
 ```text
 fixture source present:                yes
-exact-commit execution path present:   yes
-exact-commit fixture PASS observed:    no
+fixture/checker pair executed:         yes
+fixture self-test PASS observed:       yes
+unittest PASS count:                   9 / 9
+positive / negative fixtures:          1 / 8
+unittest exit code:                    0
 ```
 
-详细执行与可观察性记录见 [`selftest-results.md`](selftest-results.md)。没有可观察结果不能解释成 PASS、FAIL 或“workflow 没运行”。
+详细执行记录见 [`selftest-results.md`](selftest-results.md)。仓库中的 `.github/workflows/boot-crash-b06-selftest.yml` 仍可作为 exact-checkout 的附加执行入口，但不再是证明 fixture/checker pair 能够实际运行的唯一途径。
 
 ### L1：Linux v5.10 source contract
 
@@ -228,7 +232,7 @@ fatal event later
 
 ## 7. 自动 L1 checker 的七组契约
 
-`verify_source_contract.py` 应固定以下七组关系；任何一项被破坏都应拒绝对应 fixture：
+`verify_source_contract.py` 固定以下七组关系；任何一项被破坏都应拒绝对应 fixture：
 
 1. traditional/file load API 与 normal/crash purpose 维度分离；
 2. `struct kimage` 通过 `xchg()` 安装到 persistent global slot；
@@ -238,7 +242,7 @@ fatal event later
 6. load path 中 `machine_kexec_prepare()` 位于 image installation 之前；
 7. x86 `machine_kexec_prepare()` 预先建立 transition page-table state，而 point-of-no-return 注释与 `machine_kexec()` 定义的真实位置关系必须符合 Linux v5.10。
 
-fixture suite 的目标是证明 checker 对这些规则具有基本的接受/拒绝能力，不是替代真实 Linux v5.10 L1 运行。
+fixture suite 已实际执行通过 9 个 unittest：1 个完整正例返回全部 7 组 contract，8 个负例分别破坏对应约束并被 checker 拒绝。该结果证明 checker/fixture 的基本接受与拒绝行为，不替代真实 Linux v5.10 L1 运行。
 
 ---
 
@@ -319,9 +323,9 @@ B06 不要求在这里观察 `relocate_kernel` 的 CR3、GDT/IDT 或 page-list c
 
 不通过。破坏性实验必须有隔离、日志和恢复条件；缺环境时明确记录未执行才是正确结果。
 
-### 错误六：CI run 查询返回空集，因此记录“fixture PASS”或“fixture 没运行”
+### 错误六：把 fixture PASS 当成真实 Linux v5.10 L1 PASS
 
-不通过。当前可用查询对 workflow trigger 的覆盖有限；空结果只能记录为“结果当前不可观察”。fixture PASS 必须来自 exact committed suite 的明确 job/step 输出或可审计 checkout 中的实际 unittest 输出。
+不通过。9-case self-test 只证明 checker 对合成 fixture 的接受/拒绝行为；只有在真实 upstream v5.10 source tree 上运行 checker 或逐项人工核对，才能形成 L1 证据。
 
 ---
 
@@ -344,8 +348,8 @@ B06 实验在当前层次至少应能够回答：
 ```text
 L1 checker implementation:               complete (7 contract groups)
 fixture source:                           complete (1 positive + 8 negative)
-exact-commit CI execution path:           complete
-exact-commit fixture PASS observed:       no
+fixture/checker self-test execution:      complete (9 / 9 PASS, exit code 0)
+exact-commit CI execution path:           available as additional provenance
 real Linux v5.10 L1 checker execution:    not executed
 matching-build L2:                        not executed
 isolated-VM L3:                           not executed
@@ -353,10 +357,7 @@ isolated-VM L3:                           not executed
 
 当前尚未执行的增强证据：
 
-- 获得 exact committed 9-case fixture 的可验证 PASS / exit code 0；
 - 在完整 Linux v5.10 checkout 上执行 source-contract checker；
 - 对匹配构建执行 `nm/readelf/objdump`；
 - 在隔离 VM 中完成 normal `load → continue → execute → new kernel` 动态验证；
 - 在具备安全条件的 Kdump VM 中验证 crash image healthy-time preload 与 later crash consumption。
-
-下一最小验收动作不是继续新增 checker，而是**取得 exact committed fixture suite 的真实执行结果**。若 9 个测试全部通过并且 exit code 0，则把结果写入 [`selftest-results.md`](selftest-results.md) 和实验 README；若失败，则优先把失败作为修正单元，判断是 checker、fixture 还是 Linux v5.10 事实假设错误，修正后重新执行完整 suite。
