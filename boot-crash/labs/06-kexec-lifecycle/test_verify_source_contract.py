@@ -180,6 +180,12 @@ class B06CheckerTests(unittest.TestCase):
     def test_rejects_reserved_range_without_crash_type_guard(self) -> None:
         self.reject({"kernel/kexec_core.c": CORE.replace("image->type == KEXEC_TYPE_CRASH", "image->type != KEXEC_TYPE_CRASH")})
 
+    def test_rejects_control_page_dispatch_without_image_type_switch(self) -> None:
+        self.reject({"kernel/kexec_core.c": CORE.replace("switch (image->type)", "switch (0)")})
+
+    def test_rejects_missing_crash_control_page_case(self) -> None:
+        self.reject({"kernel/kexec_core.c": CORE.replace("case KEXEC_TYPE_CRASH:", "case KEXEC_TYPE_DEFAULT + 1:")})
+
     def test_rejects_shared_control_page_allocator(self) -> None:
         self.reject({"kernel/kexec_core.c": CORE.replace("pages = kimage_alloc_crash_control_pages(image, order);", "pages = kimage_alloc_normal_control_pages(image, order);")})
 
