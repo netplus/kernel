@@ -39,9 +39,9 @@ cd boot-crash/labs/06-kexec-lifecycle
 python3 -m unittest -v test_verify_source_contract.py
 ```
 
-当前 checker 固定 7 组 L1 契约，fixture 包含 1 个完整正例和 8 个负例。
+当前 checker 固定 7 组 L1 契约，fixture 已完成负例覆盖收口，包含 **1 个完整正例和 21 个负例，共 22 cases**。21 个负例分别覆盖 checker 对 load-purpose、persistent slot ownership、`crashk_res`、control-page policy、normal-only `swap_page`、prepare-before-install 和 x86 point-of-no-return 的独立断言；不再为了增加 case 数继续扩 synthetic fixture。完整覆盖矩阵见 [`selftest-results.md`](selftest-results.md)。
 
-此前 checker/fixture blob pair：
+曾实际执行通过的历史 checker/fixture blob pair 为：
 
 ```text
 verify_source_contract.py
@@ -51,7 +51,7 @@ test_verify_source_contract.py
   74dc63d9e4bba24c5278224513b5a640be267478
 ```
 
-曾实际得到：
+历史结果：
 
 ```text
 Ran 9 tests
@@ -59,30 +59,30 @@ OK
 exit code 0
 ```
 
-但是再次核对 upstream v5.10 `kernel/kexec_core.c` 后，发现真实 `kimage_alloc_control_pages()` 使用 `switch (image->type)` / `case KEXEC_TYPE_CRASH:`，旧 checker 却要求不存在的 `image->type == KEXEC_TYPE_CRASH` 表达式。checker 与 positive fixture 已再次修正，因此旧 9/9 只保留为**历史工具证据**，不能给最新 revision 背书。
+之后重新核对 upstream v5.10 源码，发现并修正了 checker 对函数签名、file-loader destination-slot 排列、`sanity_check_segment_list()` 可见性、control-page type dispatch 以及 x86 point-of-no-return 注释位置等假设；fixture 也随之扩展。因此旧 9/9 只保留为**历史工具证据**，不能给当前 revision 背书。
 
-最新 blob：
+当前 exact blob pair：
 
 ```text
 verify_source_contract.py
   5c89b67628cf55560089656d5b65e80ff74c556f
 
 test_verify_source_contract.py
-  5a3b4d41f0a0b9c46575904431136f26cc46ab5d
+  f18918cfbe0b01ffba59be3ac083a9971295a2f8
 ```
 
-最新 exact pair 尚未重新执行。详细 provenance 见 [`selftest-results.md`](selftest-results.md)。
+当前 22-case exact pair 尚未在能够 materialize committed files 的执行环境中重新执行。详细 provenance 见 [`selftest-results.md`](selftest-results.md)。
 
 ### L1：真实 upstream Linux v5.10 source contract
 
-最近一次人工源码复核已经确认 control-page dispatcher 的真实源码形态并据此修正 checker；但最新 checker 尚未在完整 upstream v5.10 source tree 上取得 7/7 自动 PASS。
+当前 checker 所依赖的源码事实已经针对 upstream `v5.10` tag（commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442`）逐项人工复核；这属于人工 L1 源码证据，不等价于自动 checker PASS。当前 checker 尚未在 materialized upstream v5.10 source tree 上取得 7/7 自动 PASS。
 
 当前状态：
 
 ```text
-manual upstream-v5.10 correction-point revalidation: yes
-latest exact-pair fixture PASS:                      not established after latest fix
-full-tree automated L1 checker PASS:                not established
+manual upstream-v5.10 source revalidation:             yes
+current exact-pair fixture PASS:                       not established
+full-tree automated L1 checker PASS:                   not established
 ```
 
 ### L2：匹配构建
@@ -281,21 +281,23 @@ ps -p 1 -o pid,comm,args
 ```text
 B06 source-path / tutorial / experiment model:          present
 7-group L1 checker:                                     present
-1 positive + 8 negative fixtures:                       present
-latest exact-pair fixture PASS:                         not established after latest fix
+1 positive + 21 negative fixtures (22 cases):           present
+current exact-pair fixture PASS:                        not established
 historical superseded fixture PASS:                     9/9, exit 0
-manual upstream-v5.10 control-page revalidation:        done
+manual upstream-v5.10 source revalidation:              done
 full upstream-v5.10 automated L1 checker PASS:          not established
 matching-vmlinux L2:                                    not executed
 isolated-VM L3:                                         not executed
 ```
 
-下一独立验收单元：
+下一独立验收单元已经从“继续扩 fixture”切换为实际执行：
 
 ```text
-A. 原样执行最新 checker/fixture pair，要求 9 tests / OK / exit 0；
-B. 在 upstream Linux v5.10 source 上执行同一 checker，要求 7 组 contract 全部 PASS；
-C. 记录 checker blob SHA、fixture blob SHA 和 upstream ref；
+A. 原样执行当前 checker/fixture pair，要求 22 tests / OK / exit 0；
+B. 在 upstream Linux v5.10 commit
+   2c85ebc57b3e1817b6ce1a6b703928e113a90442 的 source tree 上执行同一
+   checker，要求 7 组 contract 全部 PASS；
+C. 记录 checker blob SHA、fixture blob SHA、upstream commit 和输出；
 D. 任一失败都以 upstream v5.10 源码为准修正，不得放宽契约绕过。
 ```
 
