@@ -147,6 +147,9 @@ class B06CheckerTests(unittest.TestCase):
     def test_complete_fixture_passes_all_contracts(self) -> None:
         self.assertEqual(len(self.run_tree()), 7)
 
+    def test_rejects_traditional_api_without_crash_purpose(self) -> None:
+        self.reject({"kernel/kexec.c": TRADITIONAL.replace("KEXEC_ON_CRASH", "TRADITIONAL_CRASH_FLAG")})
+
     def test_rejects_file_api_without_crash_purpose(self) -> None:
         self.reject({"kernel/kexec_file.c": FILE_LOAD.replace("KEXEC_FILE_ON_CRASH", "FILE_CRASH_FLAG")})
 
