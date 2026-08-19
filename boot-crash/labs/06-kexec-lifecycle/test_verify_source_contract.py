@@ -153,6 +153,9 @@ class B06CheckerTests(unittest.TestCase):
     def test_rejects_missing_persistent_image_install(self) -> None:
         self.reject({"kernel/kexec.c": TRADITIONAL.replace("image = xchg(dest_image, image);", "image = *dest_image;")})
 
+    def test_rejects_file_missing_persistent_image_install(self) -> None:
+        self.reject({"kernel/kexec_file.c": FILE_LOAD.replace("image = xchg(dest_image, image);", "image = *dest_image;")})
+
     def test_rejects_missing_crash_reserved_range_end(self) -> None:
         self.reject({"kernel/kexec_core.c": CORE.replace("crashk_res.end", "ULONG_MAX")})
 
