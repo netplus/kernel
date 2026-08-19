@@ -12,7 +12,7 @@ B06 使用四级证据，不能互相冒充。
 
 ### 工具证据：checker / fixture
 
-`verify_source_contract.py` 固定 7 组 L1 契约；`test_verify_source_contract.py` 包含 1 个完整正例和 8 个负例。工具证据只回答 checker 是否能够接受满足约束的合成 fixture、拒绝被故意破坏的 fixture，不能证明真实 Linux v5.10 源码满足这些契约。
+`verify_source_contract.py` 固定 7 组 L1 契约；当前 `test_verify_source_contract.py` 包含 **1 个完整正例和 21 个负例，共 22 cases**。工具证据只回答 checker 是否能够接受满足约束的合成 fixture、拒绝被故意破坏的 fixture，不能证明真实 Linux v5.10 源码满足这些契约。
 
 必须把 PASS 绑定到具体 checker/fixture revision。此前 blob pair：
 
@@ -24,19 +24,7 @@ test_verify_source_contract.py
   74dc63d9e4bba24c5278224513b5a640be267478
 ```
 
-曾实际执行得到 `Ran 9 tests / OK / exit code 0`。但是随后再次核对 upstream v5.10 `kernel/kexec_core.c`，发现真实 `kimage_alloc_control_pages()` 使用：
-
-```c
-switch (image->type) {
-case KEXEC_TYPE_DEFAULT:
-        ...
-case KEXEC_TYPE_CRASH:
-        pages = kimage_alloc_crash_control_pages(...);
-        ...
-}
-```
-
-而旧 checker 错误要求函数体出现 `image->type == KEXEC_TYPE_CRASH`。因此 checker 与 fixture 已再次修正，旧 9/9 PASS **不能继承给当前 revision**。
+曾实际执行得到 `Ran 9 tests / OK / exit code 0`。但是随后再次核对 upstream v5.10 `kernel/kexec_core.c`，发现真实 `kimage_alloc_control_pages()` 使用 `switch (image->type)` 与 `case KEXEC_TYPE_CRASH`，而旧 checker 错误要求函数体出现 `image->type == KEXEC_TYPE_CRASH`。checker 随后按真实 v5.10 源码修正，fixture 也继续扩展到当前 22-case regression suite，因此旧 9/9 PASS **不能继承给当前 revision**。
 
 当前最新 blob：
 
@@ -45,7 +33,7 @@ verify_source_contract.py
   5c89b67628cf55560089656d5b65e80ff74c556f
 
 test_verify_source_contract.py
-  5a3b4d41f0a0b9c46575904431136f26cc46ab5d
+  f18918cfbe0b01ffba59be3ac083a9971295a2f8
 ```
 
 当前准确工具状态：
@@ -53,18 +41,19 @@ test_verify_source_contract.py
 ```text
 latest checker source:                     present
 latest fixture source:                     present
+latest fixture case count:                 22 (1 positive + 21 negative)
 latest exact-pair self-test:                not yet executed
 latest exact-pair PASS:                     not established
 historical superseded exact-pair PASS:      9/9, exit 0
 ```
 
-详细 provenance 见 [`selftest-results.md`](selftest-results.md)。
+fixture-expansion 子任务已经收口；后续不再为了增加 case 数继续扩 synthetic fixture。详细 provenance 与负例覆盖矩阵见 [`selftest-results.md`](selftest-results.md)。
 
 ### L1：真实 upstream Linux v5.10 source contract
 
-L1 必须让当前 checker 面对真实 upstream v5.10 源码。最近一次人工源码复核已经发现并修正 control-page dispatch 的 source-shape 假设，但完整自动 L1 PASS 仍未建立。
+L1 必须让当前 checker 面对真实 upstream v5.10 源码。人工源码复核已经重新确认 7 组 checker 所依赖的实现事实，但完整自动 L1 PASS 仍未建立。
 
-因此不能把“checker 语义看起来等价”或“人工核过几个修正点”写成“7 组真实 v5.10 contract 已自动通过”。
+因此不能把“checker 语义看起来等价”或“人工核过实现事实”写成“7 组真实 v5.10 contract 已自动通过”。
 
 ### L2：匹配构建
 
@@ -167,7 +156,7 @@ fatal event later
 6. load path 中 `machine_kexec_prepare()` 位于 image installation 之前；
 7. x86 `machine_kexec_prepare()` 预先建立 transition page-table state，且 point-of-no-return 注释与 `machine_kexec()` 定义的位置关系符合 upstream v5.10。
 
-fixture suite 为 1 个完整正例 + 8 个负例。最新 control-page-dispatch 修正后的 exact pair 尚未重新执行，因此当前不能写成 9/9 PASS。
+fixture suite 当前为 **1 个完整正例 + 21 个独立负例，共 22 cases**。21 个负例已经覆盖上述 7 组 contract 中 checker 独立作出的各项 assertion；详细矩阵见 `selftest-results.md`。fixture coverage 已收口，但当前 exact 22-case revision 尚未实际执行，因此不能写成 22/22 PASS。
 
 ---
 
@@ -190,10 +179,11 @@ B06 在当前层次必须能够由正文、upstream v5.10 source-path 和实验�
 ```text
 B06 source-path / tutorial / experiment model:          present
 7-group L1 checker:                                     present
-1 positive + 8 negative fixtures:                       present
-latest exact-pair fixture PASS:                         not established after latest fix
+1 positive + 21 negative fixtures (22 cases):           present
+fixture-expansion coverage review:                      closed
+latest exact-pair fixture PASS:                         not established
 historical superseded fixture PASS:                     9/9, exit 0
-manual upstream-v5.10 control-page revalidation:        done
+manual upstream-v5.10 7-contract source revalidation:   done
 full upstream-v5.10 automated L1 checker PASS:          not established
 matching-vmlinux L2:                                    not executed
 isolated-VM L3:                                         not executed
@@ -202,9 +192,9 @@ isolated-VM L3:                                         not executed
 下一独立验收单元：
 
 ```text
-A. 原样执行当前最新 checker/fixture pair，要求 9 tests / OK / exit 0；
+A. 原样执行当前最新 checker/fixture pair，要求 22 tests / OK / exit 0；
 B. 在 upstream Linux v5.10 源码上执行同一 checker，要求 7 组 contract 全部 PASS；
-C. 记录 checker blob SHA 和 upstream v5.10 ref；
+C. 记录 checker blob SHA、fixture blob SHA 和 upstream v5.10 ref；
 D. 任一失败都优先按真实 v5.10 源码修正，不能放宽 checker 绕过。
 ```
 
