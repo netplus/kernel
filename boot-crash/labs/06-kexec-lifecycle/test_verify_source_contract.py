@@ -171,6 +171,9 @@ class B06CheckerTests(unittest.TestCase):
     def test_rejects_prepare_after_install(self) -> None:
         self.reject({"kernel/kexec.c": TRADITIONAL.replace("machine_kexec_prepare(image);\n    image = xchg(dest_image, image);", "image = xchg(dest_image, image);\n    machine_kexec_prepare(image);")})
 
+    def test_rejects_file_prepare_after_install(self) -> None:
+        self.reject({"kernel/kexec_file.c": FILE_LOAD.replace("machine_kexec_prepare(image);\n    image = xchg(dest_image, image);", "image = xchg(dest_image, image);\n    machine_kexec_prepare(image);")})
+
     def test_rejects_prepare_without_transition_pgtable(self) -> None:
         self.reject({"arch/x86/kernel/machine_kexec_64.c": X86.replace("return init_pgtable(image, image->control_code_page);", "return 0;")})
 
