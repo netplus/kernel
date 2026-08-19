@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Self-tests for the B06 Linux v5.10 source-contract checker.
 
-The fixtures test the checker itself.  They are tool evidence, not a
+The fixtures test the checker itself. They are tool evidence, not a
 substitute for running verify_source_contract.py against a real v5.10 tree.
+The positive fixtures deliberately mirror the relevant upstream v5.10
+function signatures and normal/crash destination-slot ordering.
 """
 
 from __future__ import annotations
@@ -22,15 +24,17 @@ SYSCALL_DEFINE4(kexec_load, unsigned long, entry, unsigned long, nr_segments,
     if (flags & KEXEC_ON_CRASH) { }
     return do_kexec_load(entry, nr_segments, segments, flags);
 }
-static struct kimage *kimage_alloc_init(unsigned long entry, unsigned long nr_segments,
-                                        struct kexec_segment __user *segments,
-                                        unsigned long flags)
+static int kimage_alloc_init(struct kimage **rimage, unsigned long entry,
+                             unsigned long nr_segments,
+                             struct kexec_segment __user *segments,
+                             unsigned long flags)
 {
     bool kexec_on_panic = flags & KEXEC_ON_CRASH;
     struct kimage *image;
     if (!kexec_on_panic)
         image->swap_page = kimage_alloc_control_pages(image, 0);
-    return image;
+    *rimage = image;
+    return 0;
 }
 static int do_kexec_load(unsigned long entry, unsigned long nr_segments,
                          struct kexec_segment __user *segments, unsigned long flags)
@@ -49,15 +53,17 @@ static int do_kexec_load(unsigned long entry, unsigned long nr_segments,
 
 FILE_LOAD = r'''
 #define KEXEC_FILE_ON_CRASH 0x2
-static struct kimage *kimage_file_alloc_init(int kernel_fd, int initrd_fd,
-                                              const char *cmdline_ptr,
-                                              unsigned long flags)
+static int kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
+                                  int initrd_fd, const char *cmdline_ptr,
+                                  unsigned long cmdline_len,
+                                  unsigned long flags)
 {
     bool kexec_on_panic = flags & KEXEC_FILE_ON_CRASH;
     struct kimage *image;
     if (!kexec_on_panic)
         image->swap_page = kimage_alloc_control_pages(image, 0);
-    return image;
+    *rimage = image;
+    return 0;
 }
 SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
                 unsigned long, cmdline_len, const char __user *, cmdline_ptr,
@@ -65,10 +71,9 @@ SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
 {
     struct kimage **dest_image;
     struct kimage *image;
+    dest_image = &kexec_image;
     if (flags & KEXEC_FILE_ON_CRASH)
         dest_image = &kexec_crash_image;
-    else
-        dest_image = &kexec_image;
     machine_kexec_prepare(image);
     image = xchg(dest_image, image);
     return 0;
@@ -76,7 +81,7 @@ SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
 '''
 
 CORE = r'''
-static int sanity_check_segment_list(struct kimage *image)
+int sanity_check_segment_list(struct kimage *image)
 {
     if (image->type == KEXEC_TYPE_CRASH) {
         if (image->segment[0].mem < crashk_res.start)
