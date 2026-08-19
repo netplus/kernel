@@ -162,6 +162,9 @@ class B06CheckerTests(unittest.TestCase):
     def test_rejects_crash_swap_page_allocation(self) -> None:
         self.reject({"kernel/kexec.c": TRADITIONAL.replace("if (!kexec_on_panic)\n        image->swap_page", "if (kexec_on_panic)\n        image->swap_page")})
 
+    def test_rejects_file_crash_swap_page_allocation(self) -> None:
+        self.reject({"kernel/kexec_file.c": FILE_LOAD.replace("if (!kexec_on_panic)\n        image->swap_page", "if (kexec_on_panic)\n        image->swap_page")})
+
     def test_rejects_prepare_after_install(self) -> None:
         self.reject({"kernel/kexec.c": TRADITIONAL.replace("machine_kexec_prepare(image);\n    image = xchg(dest_image, image);", "image = xchg(dest_image, image);\n    machine_kexec_prepare(image);")})
 
