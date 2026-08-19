@@ -32,24 +32,34 @@ cd boot-crash/labs/06-kexec-lifecycle
 python3 -m unittest -v test_verify_source_contract.py
 ```
 
-当前必须区分两代 checker/fixture：
+当前修正版已经重新建立 exact-pair 工具证据。执行前按 Git blob-object hash 规则校验 materialized bytes 与仓库 blob SHA 完全一致：
 
 ```text
-较早 revision：                 9 tests / OK / exit code 0 已观察到
-当前 upstream-v5.10 修正版：    尚未重新取得 exact-pair unittest PASS
+verify_source_contract.py
+  cd38c6c849d8c1d33449b4d01f0039c0de23c1bc
+
+test_verify_source_contract.py
+  74dc63d9e4bba24c5278224513b5a640be267478
 ```
 
-较早结果只能证明当时那一版 fixture framework 可以执行。随后依据 upstream Linux v5.10 源码修正了 checker 与 positive fixture，包括 `kimage_alloc_init()`/`kimage_file_alloc_init()` 的真实 `int + struct kimage **` 形态、`sanity_check_segment_list()` 的可见性、file loader 的 destination-slot 源码顺序，以及 x86 `machine_kexec()` 前 point-of-no-return 注释的位置。因此旧的 9/9 PASS **不能继承给当前修正版**。
+随后实际得到：
 
-完整 provenance 见 [`selftest-results.md`](selftest-results.md)。只有当前 exact checker/fixture pair 重新得到 `Ran 9 tests`、`OK`、exit code `0`，才能把当前工具证据标记为 PASS。
+```text
+Ran 9 tests
+OK
+exit code 0
+```
+
+因此当前 corrected checker/fixture pair 的工具证据已经 PASS。较早 revision 的 9/9 结果仍只作为历史记录，不再用于给当前 revision 背书。完整 provenance 见 [`selftest-results.md`](selftest-results.md)。
 
 ### L1：真实 upstream Linux v5.10 source contract
 
-当前已对上述 checker 修正点做过 upstream v5.10 人工源码复核，但尚未在完整 upstream Linux v5.10 checkout 上执行当前 `verify_source_contract.py`。因此：
+当前已对 checker 修正点做过 upstream v5.10 人工源码复核，但尚未在完整 upstream Linux v5.10 checkout 上执行当前 `verify_source_contract.py`。因此：
 
 ```text
 manual upstream-v5.10 revalidation of corrected facts: yes
-full-tree automated L1 checker PASS:                  not established
+current exact-pair fixture self-test PASS:             9/9, exit 0
+full-tree automated L1 checker PASS:                   not established
 ```
 
 L1 自动验收必须使用完整 upstream Linux v5.10 source tree；网上资料或其他内核版本不能替代这一事实基线。
@@ -213,12 +223,11 @@ objdump -drS vmlinux | less
 B06 source-path / tutorial / experiment model:           present
 7-group L1 checker:                                      present
 1 positive + 8 negative fixtures:                        present
-historical earlier-revision fixture PASS:                9/9, exit 0
-current corrected exact-pair fixture PASS:               not established
+current corrected exact-pair fixture PASS:               9/9, exit 0
 manual upstream-v5.10 correction-point revalidation:     done
 full upstream-v5.10 automated L1 checker PASS:           not established
 matching-vmlinux L2:                                     not executed
 isolated-VM L3:                                          not executed
 ```
 
-下一独立验收单元不是继续写新理论，而是重新建立当前 checker 的 provenance：原样执行当前 exact checker/fixture pair并要求 9 tests / OK / exit code 0；随后在完整 upstream Linux v5.10 tree 上执行同一 checker并要求全部 7 组 contract PASS。两项均成立后，才能恢复 PASS 状态并进入 B06 completion review。若任一测试失败，失败本身就是下一修正单元；不得通过放宽契约或引用网上结论绕过。
+当前工具证据已经完成。下一独立验收单元不是继续写新理论，而是在完整 upstream Linux v5.10 source tree 上执行当前 checker 并要求全部 7 组 contract PASS，同时记录 upstream tag/commit 与 checker blob SHA。full-tree checker 若失败，失败本身就是下一修正单元；不得通过放宽契约或引用网上结论绕过。
