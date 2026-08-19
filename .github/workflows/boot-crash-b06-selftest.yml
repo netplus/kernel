@@ -1,11 +1,6 @@
 name: boot-crash B06 checker self-test
 
 on:
-  push:
-    paths:
-      - 'boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py'
-      - 'boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py'
-      - '.github/workflows/boot-crash-b06-selftest.yml'
   workflow_dispatch:
 
 permissions:
@@ -13,7 +8,11 @@ permissions:
 
 jobs:
   selftest:
-    runs-on: ubuntu-latest
+    # This repository currently has no budget reserved for GitHub-hosted
+    # runners. Keep this workflow opt-in and require a project-controlled
+    # self-hosted Linux/x86-64 runner instead of silently consuming hosted
+    # runner minutes.
+    runs-on: [self-hosted, linux, x64, kernel-course]
     steps:
       - name: Checkout course repository
         uses: actions/checkout@v4
