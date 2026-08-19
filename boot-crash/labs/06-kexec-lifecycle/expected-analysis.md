@@ -1,8 +1,6 @@
 # B06 实验预期分析：Kexec 生命周期与 normal/crash 资源边界
 
-本文给出 B06 实验的独立验收基线。它回答“观察到什么才足以支持 B06 的结论”，不提前展开 B07 的 segment/page-list 算法、B08 的 `relocate_kernel` 机器切换或 B10 之后的完整 Kdump crash path。
-
-源码事实基线：**upstream Linux v5.10，x86-64**。任何 Linux 具体实现结论都必须回到该版本源码核实。
+本文给出 B06 实验的独立验收基线。源码事实基线是 **upstream Linux v5.10，x86-64**。任何 Linux 具体实现结论都必须回到该版本源码核实；fixture、二手资料和等价写法都不能替代真实 v5.10 源码。
 
 相关材料：[`README.md`](README.md)、[`verify_source_contract.py`](verify_source_contract.py)、[`test_verify_source_contract.py`](test_verify_source_contract.py)、[`selftest-results.md`](selftest-results.md)、[`../../docs/06-kexec-why-and-lifecycle.md`](../../docs/06-kexec-why-and-lifecycle.md)、[`../../source-paths/06-kexec-model-linux-5.10.md`](../../source-paths/06-kexec-model-linux-5.10.md)。
 
@@ -14,11 +12,9 @@ B06 使用四级证据，不能互相冒充。
 
 ### 工具证据：checker / fixture
 
-当前 `verify_source_contract.py` 固定 7 组 L1 契约；`test_verify_source_contract.py` 包含 1 个完整正例和 8 个负例。工具证据只回答 checker 是否能接受满足约束的合成 fixture、拒绝被故意破坏的 fixture，不能证明真实 Linux v5.10 源码满足这些契约。
+`verify_source_contract.py` 固定 7 组 L1 契约；`test_verify_source_contract.py` 包含 1 个完整正例和 8 个负例。工具证据只回答 checker 是否能够接受满足约束的合成 fixture、拒绝被故意破坏的 fixture，不能证明真实 Linux v5.10 源码满足这些契约。
 
-必须按 revision 记录工具证据。较早 checker/fixture revision 曾实际得到 9/9 PASS，但随后依据 upstream Linux v5.10 源码对 checker 与 positive fixture 做了实质修正，因此旧 PASS 不作为当前版本证据。
-
-当前修正版已经重新取得 exact-pair 执行证据。执行前先按 Git blob 算法校验本地 materialized bytes 与仓库 blob SHA 完全一致：
+必须把 PASS 绑定到具体 checker/fixture revision。此前 blob pair：
 
 ```text
 verify_source_contract.py
@@ -28,36 +24,47 @@ test_verify_source_contract.py
   74dc63d9e4bba24c5278224513b5a640be267478
 ```
 
-随后实际执行：
+曾实际执行得到 `Ran 9 tests / OK / exit code 0`。但是随后再次核对 upstream v5.10 `kernel/kexec_core.c`，发现真实 `kimage_alloc_control_pages()` 使用：
 
-```bash
-python3 -m unittest -v test_verify_source_contract.py
+```c
+switch (image->type) {
+case KEXEC_TYPE_DEFAULT:
+        ...
+case KEXEC_TYPE_CRASH:
+        pages = kimage_alloc_crash_control_pages(...);
+        ...
+}
 ```
 
-得到：
+而旧 checker 错误要求函数体出现 `image->type == KEXEC_TYPE_CRASH`。因此 checker 与 fixture 已再次修正，旧 9/9 PASS **不能继承给当前 revision**。
+
+当前最新 blob：
 
 ```text
-Ran 9 tests
-OK
-exit code 0
+verify_source_contract.py
+  5c89b67628cf55560089656d5b65e80ff74c556f
+
+test_verify_source_contract.py
+  5a3b4d41f0a0b9c46575904431136f26cc46ab5d
 ```
 
-因此当前准确状态为：
+当前准确工具状态：
 
 ```text
-current corrected checker source:               present
-current corrected fixture source:               present
-current corrected exact-pair self-test:          executed
-current corrected exact-pair PASS:               established
-current corrected exact-pair PASS count:         9/9
-current corrected exact-pair exit code:          0
+latest checker source:                     present
+latest fixture source:                     present
+latest exact-pair self-test:                not yet executed
+latest exact-pair PASS:                     not established
+historical superseded exact-pair PASS:      9/9, exit 0
 ```
 
 详细 provenance 见 [`selftest-results.md`](selftest-results.md)。
 
 ### L1：真实 upstream Linux v5.10 source contract
 
-L1 必须在完整 upstream Linux v5.10 tree 上执行当前 checker，或逐项人工核对同一组契约。checker 修正点已经人工回到 v5.10 源码核实，但当前 checker 尚未在完整 tree 上取得自动 PASS。因此不能把“人工核过修正点”写成“7 组 full-tree checker 已通过”。
+L1 必须让当前 checker 面对真实 upstream v5.10 源码。最近一次人工源码复核已经发现并修正 control-page dispatch 的 source-shape 假设，但完整自动 L1 PASS 仍未建立。
+
+因此不能把“checker 语义看起来等价”或“人工核过几个修正点”写成“7 组真实 v5.10 contract 已自动通过”。
 
 ### L2：匹配构建
 
@@ -79,7 +86,7 @@ crash image 动态实验还要求可靠 `crashkernel=`、可丢弃 VM、串口�
 
 upstream v5.10 必须分别证明 traditional `kexec_load` 和 file-based `kexec_file_load` 都能够表达 normal/crash purpose。traditional path 使用 `KEXEC_ON_CRASH`，file path 使用 `KEXEC_FILE_ON_CRASH`。
 
-因此下面两条都属于错误模型：
+错误模型是：
 
 ```text
 kexec_load      == normal Kexec
@@ -100,17 +107,21 @@ traditional/file 的输入阶段不同，但 B06 验收关注相同的 ownership
 load success != CPU control transfer
 ```
 
-特别要避免按其他版本或记忆错误描述 allocator API：upstream v5.10 的 `kimage_alloc_init()` 与 `kimage_file_alloc_init()` 都返回 `int`，image 通过 `struct kimage **` out-parameter 返回。
+upstream v5.10 的 `kimage_alloc_init()` 与 `kimage_file_alloc_init()` 都返回 `int`，image 通过 `struct kimage **` out-parameter 返回。不得按其他版本或记忆改写接口形态。
 
 ---
 
 ## 4. normal/crash 在 load phase 已采用不同资源假设
 
-B06 至少要求证明三项事实：crash image 的 destination 受 `crashk_res` 约束；control-page allocation 对 normal/crash 采用不同 policy；traditional/file 两条 load path 都只为 non-crash image 准备 `image->swap_page`。
+B06 至少要求证明三项事实：
 
-这里的 `swap_page` 是 Kexec relocation/copy 内部资源，不是普通 VM swap。`kernel/kexec_core.c` 中 `sanity_check_segment_list()` 在 upstream v5.10 是全局 `int` 函数，checker 不得错误要求 `static`。
+1. crash image 的 destination 受 `crashk_res` 约束；
+2. control-page allocation 对 normal/crash 采用不同 policy；
+3. traditional/file 两条 load path 都只为 non-crash image 准备 `image->swap_page`。
 
-这些事实共同说明 crash Kexec 的特殊资源约束在 healthy-time load phase 就已经存在，而不是 fatal event 到来后才临时产生。
+其中第二项必须尊重 upstream v5.10 的真实源码形态：`kimage_alloc_control_pages()` 使用 `switch (image->type)`，`case KEXEC_TYPE_CRASH:` 调用 `kimage_alloc_crash_control_pages()`。不能因为 `if (image->type == KEXEC_TYPE_CRASH)` 在语义上等价，就把并不存在的表达式写进自动验收条件。
+
+`sanity_check_segment_list()` 在 upstream v5.10 是全局 `int` 函数，不应强制匹配成 `static`。
 
 ---
 
@@ -118,7 +129,9 @@ B06 至少要求证明三项事实：crash image 的 destination 受 `crashk_res
 
 x86-64 `machine_kexec_prepare(struct kimage *image)` 属于 load phase，并通过 `init_pgtable()` 等逻辑预先准备 transition state；此阶段仍允许失败并回滚本次 load。
 
-`machine_kexec()` 属于之后的 execute/transition phase。upstream v5.10 中“Do not allocate memory ... point of no return”注释位于 `machine_kexec()` 定义**之前**，不是函数体内部。验收既要检查这个真实源码布局，也要保持语义边界：不能因为两个函数都叫 `machine_kexec*` 就把 prepare 当成已经开始执行下一内核。
+`machine_kexec()` 属于之后的 execute/transition phase。upstream v5.10 中“Do not allocate memory ... point of no return”注释位于 `machine_kexec()` 定义之前，不是函数体内部。
+
+B06 只固定阶段边界；具体 CR3/page-list/`relocate_kernel` 指令级过程留给 B08。
 
 ---
 
@@ -126,7 +139,7 @@ x86-64 `machine_kexec_prepare(struct kimage *image)` 属于 load phase，并通�
 
 normal execute 假设旧 kernel 仍健康，可以按计划收缩 ordinary activity 并进入 architecture transition。crash execute 面对的生产 kernel 已发生 fatal failure，不能继续把普通锁、scheduler、workqueue、设备 shutdown 或普通内存分配当作可靠前提。
 
-B06 只建立这个生命周期：
+B06 只建立下面的生命周期：
 
 ```text
 healthy production kernel
@@ -149,12 +162,12 @@ fatal event later
 1. traditional/file load API 与 normal/crash purpose 分离；
 2. `struct kimage` 通过 `xchg()` 安装到 persistent global slot；
 3. crash destination 受 `crashk_res` 约束；
-4. crash image 使用 crash-specific control-page policy；
+4. `kimage_alloc_control_pages()` 通过 v5.10 的 type dispatch 将 crash image 交给 crash-specific control-page allocator；
 5. traditional/file 两条路径都只为 normal image 准备 `swap_page`；
 6. load path 中 `machine_kexec_prepare()` 位于 image installation 之前；
 7. x86 `machine_kexec_prepare()` 预先建立 transition page-table state，且 point-of-no-return 注释与 `machine_kexec()` 定义的位置关系符合 upstream v5.10。
 
-fixture suite 为 1 个完整正例 + 8 个负例；当前 exact pair 已重新执行并取得 9/9 PASS。该结果只证明 checker 自身，不替代完整 upstream tree 的 L1 自动验收。
+fixture suite 为 1 个完整正例 + 8 个负例。最新 control-page-dispatch 修正后的 exact pair 尚未重新执行，因此当前不能写成 9/9 PASS。
 
 ---
 
@@ -178,20 +191,21 @@ B06 在当前层次必须能够由正文、upstream v5.10 source-path 和实验�
 B06 source-path / tutorial / experiment model:          present
 7-group L1 checker:                                     present
 1 positive + 8 negative fixtures:                       present
-current corrected exact-pair fixture PASS:              9/9, exit 0
-manual upstream-v5.10 correction-point revalidation:    done
+latest exact-pair fixture PASS:                         not established after latest fix
+historical superseded fixture PASS:                     9/9, exit 0
+manual upstream-v5.10 control-page revalidation:        done
 full upstream-v5.10 automated L1 checker PASS:          not established
 matching-vmlinux L2:                                    not executed
 isolated-VM L3:                                         not executed
 ```
 
-当前工具证据已经恢复。下一独立验收单元只剩真实 upstream tree 的自动 L1：
+下一独立验收单元：
 
 ```text
-A. 在完整 upstream Linux v5.10 tree 上执行当前 verify_source_contract.py；
-B. 要求全部 7 组 source-contract PASS；
-C. 记录 upstream tag/commit 与 checker blob SHA；
-D. 只有 A-C 成立后，才能进入 B06 completion review。
+A. 原样执行当前最新 checker/fixture pair，要求 9 tests / OK / exit 0；
+B. 在 upstream Linux v5.10 源码上执行同一 checker，要求 7 组 contract 全部 PASS；
+C. 记录 checker blob SHA 和 upstream v5.10 ref；
+D. 任一失败都优先按真实 v5.10 源码修正，不能放宽 checker 绕过。
 ```
 
-若 full-tree checker 失败，失败本身就是下一修正单元。不得通过放宽契约、引用网上结论或沿用人工推断绕过失败。
+A-C 成立后才能进入 B06 completion review。
