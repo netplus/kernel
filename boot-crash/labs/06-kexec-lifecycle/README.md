@@ -17,7 +17,7 @@
 
 ---
 
-## 1. 要验证的问题
+## 1. 证据等级与当前状态
 
 实验按四级证据组织。工具证据用于验证 checker 自身；L1/L2/L3 分别验证真实源码、匹配构建和运行现场，不能互相替代。
 
@@ -32,56 +32,63 @@ cd boot-crash/labs/06-kexec-lifecycle
 python3 -m unittest -v test_verify_source_contract.py
 ```
 
-2026-08-19 已实际执行当前 GitHub 版本的 checker/fixture pair，结果为：
+当前必须区分两代 checker/fixture：
 
 ```text
-Ran 9 tests
-
-OK
+较早 revision：                 9 tests / OK / exit code 0 已观察到
+当前 upstream-v5.10 修正版：    尚未重新取得 exact-pair unittest PASS
 ```
 
-exit code 为 `0`。完整记录见 [`selftest-results.md`](selftest-results.md)。这一结果只证明 checker 对合成 fixture 的接受/拒绝行为，不代表真实 Linux v5.10 L1 已通过。
+较早结果只能证明当时那一版 fixture framework 可以执行。随后依据 upstream Linux v5.10 源码修正了 checker 与 positive fixture，包括 `kimage_alloc_init()`/`kimage_file_alloc_init()` 的真实 `int + struct kimage **` 形态、`sanity_check_segment_list()` 的可见性、file loader 的 destination-slot 源码顺序，以及 x86 `machine_kexec()` 前 point-of-no-return 注释的位置。因此旧的 9/9 PASS **不能继承给当前修正版**。
 
-### L1：Linux v5.10 source contract
+完整 provenance 见 [`selftest-results.md`](selftest-results.md)。只有当前 exact checker/fixture pair 重新得到 `Ran 9 tests`、`OK`、exit code `0`，才能把当前工具证据标记为 PASS。
 
-在完整 Linux v5.10 source tree 上确认：
+### L1：真实 upstream Linux v5.10 source contract
+
+当前已对上述 checker 修正点做过 upstream v5.10 人工源码复核，但尚未在完整 upstream Linux v5.10 checkout 上执行当前 `verify_source_contract.py`。因此：
+
+```text
+manual upstream-v5.10 revalidation of corrected facts: yes
+full-tree automated L1 checker PASS:                  not established
+```
+
+L1 自动验收必须使用完整 upstream Linux v5.10 source tree；网上资料或其他内核版本不能替代这一事实基线。
+
+### L2：匹配构建的符号与机器码
+
+尚未执行。需要匹配 Linux v5.10 的 `.config` 与 `vmlinux`，再用 `nm/readelf/objdump` 检查实际编译结果和 call/control-flow。
+
+### L3：运行时生命周期
+
+尚未执行。需要隔离 VM；normal Kexec 要观察 load 后旧 kernel 继续运行以及后续独立 execute，crash 路径只有在具备可靠恢复、串口日志和可丢弃环境时才允许触发。
+
+---
+
+## 2. L1 要验证的七组源码事实
+
+在完整 upstream Linux v5.10 source tree 上确认：
 
 1. traditional `kexec_load` 与 file-based `kexec_file_load` 都能选择 normal 或 crash image；不能把两种 syscall 等同于两种用途；
 2. load path 在健康旧内核中构造 `struct kimage`，调用 `machine_kexec_prepare()`，完成 segment loading/termination/post-load 后才用 `xchg()` 安装到 `kexec_image` 或 `kexec_crash_image`；
-3. syscall 成功返回时 image 已被全局 Kexec 状态持有，但 execute 尚未发生；
-4. crash image 的 destination 受 `crashk_res` 约束；
-5. normal/crash 使用不同的 control-page allocation policy，且 normal image 才分配 `image->swap_page`；
-6. x86-64 `machine_kexec_prepare()` 在 load phase 建立 transition page-table 状态；
-7. x86-64 `machine_kexec()` 位于 execute/transition phase，源码明确把它放在 point of no return 之后，不应再分配内存或设计可恢复失败。
+3. crash image 的 destination 受 `crashk_res` 约束；
+4. normal/crash 使用不同的 control-page allocation policy；
+5. traditional/file 两条路径都只为 non-crash image 准备 `image->swap_page`；
+6. `machine_kexec_prepare()` 位于 image installation 之前，仍属于可失败的 load phase；
+7. x86-64 `machine_kexec_prepare()` 预先建立 transition page-table state，而 `machine_kexec()` 前的源码注释明确给出 point-of-no-return / 不再分配内存的阶段边界。
 
-自动检查可在真实 v5.10 checkout 上运行：
+自动检查：
 
 ```bash
 python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py /path/to/linux-v5.10
 ```
 
-### L2：匹配构建的符号与机器码
-
-在实际 Linux 5.10 构建产物上确认 generic/arch 边界确实进入当前配置编译结果。重点不是根据符号地址排序推断调用顺序，而是检查实际 call/control-flow 与配置裁剪结果。
-
-### L3：运行时生命周期
-
-在隔离 VM 中分别观察：
-
-```text
-load image
-→ old kernel continues running
-→ later explicit execute
-→ new kernel boots
-```
-
-如果测试 crash image，还要单独证明 crash image 可以在生产内核健康时预加载，而真正消费发生在之后的 fatal/crash event。B06 只观察生命周期，不在这里分析 panic/NMI 的完整 crash path。
+checker PASS 只能说明这七组源码契约与被检查的 tree 匹配；仍不能证明发行版配置或某次运行时机器状态。
 
 ---
 
-## 2. L1：准备 Linux v5.10 源码
+## 3. 准备 upstream Linux v5.10 源码
 
-建议使用干净 checkout：
+建议使用干净 checkout，并确认 tag/commit：
 
 ```bash
 git clone --depth 1 --branch v5.10 https://github.com/torvalds/linux.git linux-v5.10
@@ -89,7 +96,7 @@ cd linux-v5.10
 git describe --tags --always
 ```
 
-应确认版本指向 `v5.10`。本章主要查看：
+本章主要查看：
 
 ```text
 kernel/kexec.c
@@ -100,7 +107,7 @@ arch/x86/kernel/machine_kexec_64.c
 arch/x86/kernel/kexec-bzimage64.c
 ```
 
-配置至少要区分：
+配置至少区分：
 
 ```text
 CONFIG_KEXEC_CORE
@@ -109,49 +116,32 @@ CONFIG_KEXEC_FILE
 CONFIG_CRASH_DUMP
 ```
 
-不要因为某个发行版内核暴露了 `/sbin/kexec` 就反推所有内核配置路径都存在。
+不要因为某个发行版暴露了 `/sbin/kexec` 就反推所有源码配置路径都存在。
 
 ---
 
-## 3. L1-A：证明“加载接口”和“映像用途”是二维关系
+## 4. L1-A：加载 API 与 image purpose 是二维关系
 
-先定位两个 syscall 与 crash flags：
+定位两个 syscall 与 crash flags：
 
 ```bash
 grep -n "SYSCALL_DEFINE.*kexec_load" kernel/kexec.c
 grep -n "SYSCALL_DEFINE.*kexec_file_load" kernel/kexec_file.c
-grep -R -n "KEXEC_ON_CRASH\|KEXEC_FILE_ON_CRASH" \
-    kernel include arch/x86 | head -80
+grep -R -n "KEXEC_ON_CRASH\|KEXEC_FILE_ON_CRASH" kernel include arch/x86 | head -80
 ```
 
-人工核对时回答：
-
-```text
-traditional + normal  是否可表达？
-traditional + crash   是否可表达？
-file + normal         是否可表达？
-file + crash          是否可表达？
-```
-
-预期结论是四种组合在接口模型上都成立；具体是否可用还受内核配置、安全策略、签名要求和 userspace 工具能力影响。
-
-这一观察用于排除错误模型：
-
-```text
-kexec_load      = normal
-kexec_file_load = crash
-```
+人工核对 traditional/file × normal/crash 四种组合。四种组合在接口模型上都可表达；实际可用性还受配置、安全策略、签名要求和 userspace 工具影响。错误模型是把 `kexec_load` 等同 normal、把 `kexec_file_load` 等同 crash。
 
 ---
 
-## 4. L1-B：沿 traditional load path 观察 ownership handoff
+## 5. L1-B：traditional load path 的 ownership handoff
 
-从 `kernel/kexec.c` 沿主线阅读：
+沿 `kernel/kexec.c` 主线阅读：
 
 ```text
 SYSCALL_DEFINE4(kexec_load)
   → do_kexec_load()
-      → kimage_alloc_init()
+      → kimage_alloc_init(..., struct kimage **rimage)
       → machine_kexec_prepare()
       → kimage_crash_copy_vmcoreinfo()
       → kimage_load_segment()
@@ -160,293 +150,75 @@ SYSCALL_DEFINE4(kexec_load)
       → xchg(dest_image, image)
 ```
 
-建议定位：
+注意：upstream v5.10 的 `kimage_alloc_init()` 返回 `int`，通过 `struct kimage **rimage` 输出 image；不要按其他版本或记忆写成直接返回 `struct kimage *`。
 
-```bash
-grep -n "do_kexec_load\|kimage_alloc_init\|machine_kexec_prepare\|machine_kexec_post_load" kernel/kexec.c
-grep -n "xchg.*kexec_image\|xchg.*kexec_crash_image\|xchg.*dest_image" kernel/kexec.c
-```
-
-需要记录两个时间点：
-
-```text
-Tload-entry：syscall 尚在执行，image 是本次 load operation 正在构造的对象
-Tload-success：xchg 安装完成，syscall 可以返回，但 image 生命周期继续存在
-```
-
-验收关键不是变量名本身，而是 ownership：成功 load 以后，`struct kimage` 不依赖 syscall 栈帧继续存活。
+成功 `xchg()` 后，`struct kimage` 不依赖 syscall 栈帧继续存活，因此 `load success != CPU control transfer`。
 
 ---
 
-## 5. L1-C：沿 file load path 找到相同的生命周期汇合点
+## 6. L1-C：file load path 的同一生命周期语义
 
-从 `kernel/kexec_file.c` 阅读：
+upstream v5.10 中 `kimage_file_alloc_init()` 同样返回 `int` 并通过 out-parameter 返回 image。file loader 先把 `dest_image` 初始化为 `&kexec_image`，在 `KEXEC_FILE_ON_CRASH` 时再覆盖为 `&kexec_crash_image`。验收应检查 normal/crash 两个目标都能表达，而不是虚构 traditional/file 两条路径必须具有相同文本顺序。
 
-```text
-SYSCALL_DEFINE5(kexec_file_load)
-  → kimage_file_alloc_init()
-      → do_kimage_alloc_init()
-      → file-mode image preparation
-      → architecture image loader
-      → control-code/swap-page preparation
-  → machine_kexec_prepare()
-  → kimage_load_segment()
-  → kimage_terminate()
-  → machine_kexec_post_load()
-  → xchg(dest_image, image)
-```
-
-建议：
-
-```bash
-grep -n "kimage_file_alloc_init\|machine_kexec_prepare\|machine_kexec_post_load" kernel/kexec_file.c
-grep -n "xchg" kernel/kexec_file.c
-```
-
-把它与上一节并排比较。两条路径的输入处理不同，但 B06 关心的后半段语义相同：都形成可由旧内核长期持有的 `struct kimage`，并把 execute 留给未来事件。
+后半段仍汇合到 `machine_kexec_prepare()`、segment loading/termination/post-load 和 `xchg(dest_image, image)`，所以 B06 关心的是 ownership/lifecycle 汇合。
 
 ---
 
-## 6. L1-D：验证 normal/crash 从 load phase 就使用不同资源假设
+## 7. L1-D：normal/crash 的不同资源假设
 
-### 6.1 crash destination
+在 `kernel/kexec_core.c` 定位 `sanity_check_segment_list()` 和 `crashk_res`。upstream v5.10 中 `sanity_check_segment_list()` 是全局 `int` 函数，不应强制匹配成 `static`。
 
-在 `kernel/kexec_core.c` 中定位 `sanity_check_segment_list()`，确认 crash image 的目标范围要接受 `crashk_res` 约束。
+继续定位 `kimage_alloc_control_pages()`，检查 normal/crash 的 allocation policy；再检查 traditional/file 两条 load path，确认只有 non-crash image 准备 `image->swap_page`。
 
-```bash
-grep -n "sanity_check_segment_list\|crashk_res" kernel/kexec_core.c kernel/kexec.c
-```
-
-这里验证的是 destination constraint，不是 B10 对 `crashkernel=` 参数解析和 reserved-memory 建立过程的完整讲解。
-
-### 6.2 control pages
-
-定位：
-
-```bash
-grep -n "kimage_alloc_control_pages" kernel/kexec_core.c kernel/kexec.c kernel/kexec_file.c
-```
-
-人工检查 allocator 如何根据 `image->type` / crash state 选择不同策略。记录“normal 与 crash 的 control page policy 不同”，不要把具体 allocator 细节扩展成 B07/B08 的 relocation 算法。
-
-### 6.3 `swap_page`
-
-```bash
-grep -R -n "swap_page" kernel/kexec.c kernel/kexec_file.c kernel/kexec_core.c include/linux/kexec.h
-```
-
-确认 traditional/file 两条 load path 都只在 non-crash 情况为 image 准备 `swap_page`。
-
-预期结论：crash Kexec 不是到 panic 时才第一次变成特殊路径；它从映像准备阶段就使用不同资源约束。
+这三项共同证明 crash Kexec 的特殊资源约束在 healthy-time load phase 已经存在，而不是 panic 到来时才临时产生。
 
 ---
 
-## 7. L1-E：验证 `machine_kexec_prepare()` 与 `machine_kexec()` 属于不同阶段
+## 8. L1-E：prepare 与 execute 的 point-of-no-return 边界
 
-查看 x86-64：
+`arch/x86/kernel/machine_kexec_64.c` 中，`machine_kexec_prepare()` 在 load phase 调用 `init_pgtable()` 等逻辑准备 transition mapping；这里仍允许失败并回滚本次 load。
 
-```bash
-grep -n "machine_kexec_prepare\|machine_kexec(" arch/x86/kernel/machine_kexec_64.c
-```
-
-对 `machine_kexec_prepare()`，继续定位：
-
-```bash
-grep -n "init_pgtable\|init_transition_pgtable" arch/x86/kernel/machine_kexec_64.c
-```
-
-需要确认它在 load path 被调用，并提前建立 transition 所需映射。这里仍允许分配失败并回滚本次 load。
-
-再查看 `machine_kexec()` 周围注释和函数体。记录：
-
-```text
-进入前：prepare 已完成，旧 kernel 开始进入不可逆 transition
-进入后：不应再依赖新的普通内存分配或可恢复错误路径
-```
-
-这就是 B06 的 point-of-no-return 边界。
+upstream Linux v5.10 中，“Do not allocate memory ... point of no return” 的注释位于 `machine_kexec()` **定义之前**，不是函数体内部。进入 `machine_kexec()` 后不应再设计新的普通内存分配或可恢复失败路径。具体 CR3/page-list/relocation 指令级过程留给 B08。
 
 ---
 
-## 8. L2：在匹配 Linux 5.10 构建上检查编译结果
+## 9. L2：匹配构建的 ELF / 机器码
 
-如果已有匹配配置的 `vmlinux`：
+如果已有匹配构建：
 
 ```bash
 nm -n vmlinux | grep -E ' (machine_kexec|machine_kexec_prepare|kimage_alloc_control_pages|sanity_check_segment_list)$'
-
 objdump -drS vmlinux | less
 ```
 
-建议分别定位 generic load helper 与 `machine_kexec_prepare()`/`machine_kexec()` 的 call sites。
-
-L2 要回答：
-
-- 当前构建是否包含 traditional/file Kexec 对应代码；
-- `machine_kexec_prepare()` 是否确实从 load path 进入；
-- 当前配置下 crash-specific 分支是否被编译；
-- arch transition 函数是否与源码核验的 x86-64 实现匹配。
-
-不要用函数在 ELF 中的地址先后代替控制流分析。编译器可以重排函数布局，inline、LTO 或配置裁剪也会改变可见符号。
+记录 `.config` 中 Kexec/Kdump 相关配置，并检查真实 call/control-flow。不要用函数地址在 ELF 中的排列顺序代替调用关系。
 
 ---
 
-## 9. L3-A：证明 load 成功后旧 kernel 继续运行
+## 10. L3-A：证明 load 后旧 kernel 继续运行
 
-以下步骤只在隔离 VM 中执行。准备与当前 VM 兼容的 kernel/initrd 后：
-
-```bash
-uname -a
-sudo kexec -l /boot/<kernel> \
-    --initrd=/boot/<initrd> \
-    --command-line="<known-good-command-line>"
-```
-
-load 成功后，**不要立即执行 `kexec -e`**。先记录：
-
-```bash
-date
-cat /proc/uptime
-cat /proc/cmdline
-ps -p 1 -o pid,comm,args
-```
-
-等待数秒再重复一次 `cat /proc/uptime`。如果旧 kernel 仍在继续运行，说明 load 与 execute 不是同一事件。
-
-然后才执行：
-
-```bash
-sudo kexec -e
-```
-
-系统将离开旧 kernel。新 kernel 启动后记录：
-
-```bash
-uname -a
-cat /proc/uptime
-cat /proc/cmdline
-```
-
-这组证据只证明生命周期分离。`machine_kexec()` 内部 CR3、page list 和 relocation 过程留给 B08。
+只在隔离 VM 中执行。`kexec -l` 成功后不要立即 `kexec -e`，先重复观察 `/proc/uptime`、`/proc/cmdline` 和 PID 1，确认旧 kernel 仍继续运行；之后才显式 execute，并在新 kernel 中重新记录 `uname -a`、uptime 和 command line。最好让新旧 kernel release 或 command line 有可识别差异。
 
 ---
 
-## 10. L3-B：crash image 的预加载观察
+## 11. L3-B：crash image 预加载观察
 
-只有已经正确配置 `crashkernel=`、并且确认测试 VM 可以丢弃时才做这一节。
+只有正确配置 `crashkernel=` 且 VM 可丢弃时才执行。B06 只验证 healthy production kernel 中预加载 crash image 与以后 fatal event 的时间分离。没有可靠隔离、串口日志和恢复手段时不要主动 panic；`crash_kexec()`、CPU stopping、`elfcorehdr` 和 capture kernel 属于后续章节。
 
-先检查：
+---
 
-```bash
-cat /proc/cmdline
-grep -i crash /proc/iomem
-```
-
-使用发行版支持的 kdump/kexec 工具把 crash kernel **预加载**到生产 kernel 中，然后在触发 crash 之前记录工具状态和 `/proc/iomem` 中的 reserved region。
-
-B06 的验收点只有：
+## 12. 当前验收状态
 
 ```text
-crash image preparation 发生在生产 kernel 仍健康时
-fatal event               发生在以后
+B06 source-path / tutorial / experiment model:           present
+7-group L1 checker:                                      present
+1 positive + 8 negative fixtures:                        present
+historical earlier-revision fixture PASS:                9/9, exit 0
+current corrected exact-pair fixture PASS:               not established
+manual upstream-v5.10 correction-point revalidation:     done
+full upstream-v5.10 automated L1 checker PASS:           not established
+matching-vmlinux L2:                                     not executed
+isolated-VM L3:                                          not executed
 ```
 
-不要在本章把“触发 panic 后的 CPU stopping、`crash_kexec()`、elfcorehdr、capture kernel”全部展开；这些分别属于 B10–B13。
-
-如果没有可靠的隔离 VM、串口日志和自动恢复手段，**不要触发 panic**，只记录 crash image preload 已完成以及动态 crash transition 未执行。
-
----
-
-## 11. 结果记录模板
-
-```text
-Kernel source:
-  tag/commit:
-  architecture:
-  relevant CONFIG_KEXEC*:
-  CONFIG_CRASH_DUMP:
-
-L1 traditional/file × normal/crash:
-  traditional normal:
-  traditional crash:
-  file normal:
-  file crash:
-
-L1 ownership:
-  traditional install point:
-  file install point:
-  normal slot:
-  crash slot:
-
-L1 resource differences:
-  crashk_res destination check:
-  control-page policy:
-  normal-only swap_page:
-
-L1 phase boundary:
-  machine_kexec_prepare load-phase evidence:
-  machine_kexec point-of-no-return evidence:
-
-L2 build:
-  vmlinux Build ID/config:
-  symbols checked:
-  call/control-flow checked:
-
-L3 normal runtime:
-  load command:
-  old-kernel uptime after load:
-  execute command:
-  new-kernel evidence:
-
-L3 crash preload/runtime:
-  crashkernel reservation:
-  preload evidence:
-  crash transition executed: yes/no
-```
-
----
-
-## 12. 通过标准
-
-### 工具证据通过
-
-当前已完成：7 组 checker contract，1 个完整正例 + 8 个负例，实际执行 `9 / 9 PASS`、`OK`、exit code `0`。该结果不能替代真实 Linux v5.10 L1。
-
-### L1 通过
-
-能够用 Linux v5.10 源码证明：
-
-- load API 与 image purpose 是二维关系；
-- load path 构造并安装 `struct kimage`，syscall return 不等于 execute；
-- normal/crash 分别由 `kexec_image` / `kexec_crash_image` 持有；
-- crash destination/control-page policy 与 normal 不同；
-- `swap_page` 是 normal-only；
-- `machine_kexec_prepare()` 属于可失败的 load phase；
-- `machine_kexec()` 属于 point-of-no-return transition phase。
-
-### L2 通过
-
-匹配构建的符号与实际 call/control-flow 和 L1 相符，并准确记录配置裁剪造成的差异。
-
-### L3 通过
-
-normal Kexec 至少观察到：load 成功后旧 kernel 继续运行，之后的 execute 才发生内核切换。crash 部分如果执行，则必须能区分 healthy-time preload 与 later fatal-event consumption。
-
----
-
-## 13. 当前执行状态
-
-自动验收已经完成工具层闭环：
-
-```text
-checker implementation:                  complete (7 contract groups)
-fixture source:                          complete (1 positive + 8 negative)
-fixture/checker self-test:               9 / 9 PASS, OK, exit code 0
-real Linux v5.10 L1 checker execution:   not executed
-matching-build L2:                       not executed
-isolated-VM L3:                          not executed
-```
-
-fixture 的实际执行记录见 [`selftest-results.md`](selftest-results.md)。当前环境仍没有完整 upstream v5.10 checkout、匹配 `vmlinux` 和安全的 Kexec/Kdump VM，因此没有填写推测性的 L1/L2/L3 结果。
-
-下一最小单元是 B06 整章一致性复核：对照正文、source-path、实验、expected analysis、checker 与 self-test，检查 load/execute 生命周期、`kimage` ownership、normal/crash 资源边界、point-of-no-return 和证据等级是否一致；发现具体问题则先修正，否则生成 B06 completion review。
+下一独立验收单元不是继续写新理论，而是重新建立当前 checker 的 provenance：原样执行当前 exact checker/fixture pair并要求 9 tests / OK / exit code 0；随后在完整 upstream Linux v5.10 tree 上执行同一 checker并要求全部 7 组 contract PASS。两项均成立后，才能恢复 PASS 状态并进入 B06 completion review。若任一测试失败，失败本身就是下一修正单元；不得通过放宽契约或引用网上结论绕过。
