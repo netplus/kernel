@@ -171,8 +171,14 @@ class B06CheckerTests(unittest.TestCase):
     def test_rejects_file_missing_normal_destination_slot(self) -> None:
         self.reject({"kernel/kexec_file.c": FILE_LOAD.replace("dest_image = &kexec_image;", "dest_image = &kexec_crash_image;", 1)})
 
+    def test_rejects_missing_crash_reserved_range_start(self) -> None:
+        self.reject({"kernel/kexec_core.c": CORE.replace("crashk_res.start", "0")})
+
     def test_rejects_missing_crash_reserved_range_end(self) -> None:
         self.reject({"kernel/kexec_core.c": CORE.replace("crashk_res.end", "ULONG_MAX")})
+
+    def test_rejects_reserved_range_without_crash_type_guard(self) -> None:
+        self.reject({"kernel/kexec_core.c": CORE.replace("image->type == KEXEC_TYPE_CRASH", "image->type != KEXEC_TYPE_CRASH")})
 
     def test_rejects_shared_control_page_allocator(self) -> None:
         self.reject({"kernel/kexec_core.c": CORE.replace("pages = kimage_alloc_crash_control_pages(image, order);", "pages = kimage_alloc_normal_control_pages(image, order);")})
