@@ -207,6 +207,18 @@ class B06CheckerTests(unittest.TestCase):
     def test_rejects_missing_point_of_no_return_contract(self) -> None:
         self.reject({"arch/x86/kernel/machine_kexec_64.c": X86.replace("past the point of no return", "final transition begins here")})
 
+    def test_rejects_point_of_no_return_contract_after_machine_kexec(self) -> None:
+        comment = '''/*
+ * Do not allocate memory (or fail in any way) in machine_kexec().
+ * We are past the point of no return, committed to rebooting now.
+ */
+'''
+        broken = X86.replace(comment, "").replace(
+            "void machine_kexec(struct kimage *image)\n{\n    relocate_kernel();\n}",
+            "void machine_kexec(struct kimage *image)\n{\n    relocate_kernel();\n}\n" + comment,
+        )
+        self.reject({"arch/x86/kernel/machine_kexec_64.c": broken})
+
 
 if __name__ == "__main__":
     unittest.main()
