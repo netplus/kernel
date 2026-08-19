@@ -93,7 +93,7 @@ current exact-pair self-test after latest correction:   not yet executed
 current exact-pair PASS after latest correction:        not established
 current exact-pair PASS count:                          not established
 current exact-pair exit code:                           not established
-manual upstream-v5.10 control-page revalidation:        yes
+manual upstream-v5.10 source revalidation:              yes
 full upstream-v5.10 automated L1 checker PASS:           not established
 matching-vmlinux L2 executed:                            no
 Kexec/Kdump VM L3 executed:                              no
@@ -101,7 +101,72 @@ Kexec/Kdump VM L3 executed:                              no
 
 Do not copy the earlier 9/9 result into the current revision without executing these exact blobs.
 
-## 4. Why the latest correction matters
+## 4. Upstream v5.10 source audit recorded on 2026-08-19
+
+The source facts used by the current checker were re-audited against the upstream `v5.10` tag itself, not against a secondary article or a later kernel version.
+
+The tag resolves to:
+
+```text
+upstream repository: torvalds/linux
+ref:                 v5.10
+commit:              2c85ebc57b3e1817b6ce1a6b703928e113a90442
+commit subject:      Linux 5.10
+```
+
+The four source blobs read for B06 were:
+
+```text
+kernel/kexec.c
+  c82c6c06f0518f3591de33431904d60175e69bc2
+
+kernel/kexec_file.c
+  e21f6b9234f7a2dbcfe17df61d1611b5d3bbb9d7
+
+kernel/kexec_core.c
+  8798a8183974e3b3d52ac53dc4b981f4055f0b52
+
+arch/x86/kernel/machine_kexec_64.c
+  a29a44a98e5bef10751af769bd198d783e23b9fd
+```
+
+The audit reconfirmed the checker model:
+
+```text
+1. kexec_load and kexec_file_load are distinct load APIs; each has a
+   crash-purpose flag in the v5.10 source.
+
+2. both load paths select persistent normal/crash image slots and install
+   the prepared image with xchg(); the textual order of slot selection is
+   not identical between the two loaders.
+
+3. sanity_check_segment_list() constrains KEXEC_TYPE_CRASH segment
+   destinations to the crashk_res range.
+
+4. kimage_alloc_control_pages() dispatches on image->type with a switch and
+   uses kimage_alloc_crash_control_pages() for KEXEC_TYPE_CRASH.
+
+5. kimage_alloc_init() and kimage_file_alloc_init() allocate swap_page only
+   when !kexec_on_panic.
+
+6. machine_kexec_prepare(image) occurs in both load paths before the image
+   is installed into the persistent destination slot.
+
+7. x86-64 machine_kexec_prepare() calls init_pgtable(); the source then
+   states the point-of-no-return rule immediately before machine_kexec().
+```
+
+This is **manual L1 source revalidation**, not an automated checker PASS. It is recorded separately so a source-reading result cannot be mistaken for execution evidence.
+
+An attempt to materialize a complete `v5.10` checkout in the current local execution environment with:
+
+```text
+git clone --depth 1 --branch v5.10 https://github.com/torvalds/linux.git ...
+```
+
+failed because that execution environment could not resolve `github.com`. The GitHub connector could still read the exact upstream tag and source blobs listed above, so the source audit itself was not blocked; only the planned end-to-end CLI run on a materialized checkout remains blocked in this environment.
+
+## 5. Why the latest correction matters
 
 The old contract checked:
 
@@ -115,7 +180,7 @@ That condition does not exist in upstream Linux v5.10 because the function uses 
 
 This is exactly the type of failure the course rules require us to fix: implementation facts must follow upstream v5.10 source shape, not a synthetic fixture or a remembered equivalent implementation.
 
-## 5. CI and cost boundary
+## 6. CI and cost boundary
 
 The repository contains:
 
@@ -143,18 +208,19 @@ Preferred execution order remains:
 
 A self-hosted runner must be treated as infrastructure: use a dedicated low-privilege account or VM where practical, restrict repository access, keep the `kernel-course` label explicit, and clean the work directory between jobs. Do not expose unrelated credentials to course test jobs.
 
-## 6. Next acceptance action
+## 7. Next acceptance action
 
-The next minimum acceptance unit is two-part and must use the latest corrected checker:
+The next minimum acceptance unit remains two-part and must use the latest corrected checker:
 
 ```text
 A. execute the exact current checker/fixture pair;
    require 9 tests, OK, exit code 0;
 
-B. execute the same checker against upstream Linux v5.10 source;
+B. execute the same checker against a materialized upstream Linux v5.10
+   checkout at commit 2c85ebc57b3e1817b6ce1a6b703928e113a90442;
    require all 7 source-contract groups to PASS;
 
-C. record the checker blob SHA and upstream v5.10 ref used;
+C. record the checker blob SHA, fixture blob SHA and upstream v5.10 commit;
 
 D. if either A or B fails, make that concrete failure the next correction unit.
 ```
