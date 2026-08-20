@@ -18,18 +18,10 @@ jobs:
       - name: Checkout course repository
         uses: actions/checkout@v4
         with:
-          # A persistent self-hosted runner reuses its workspace. Require the
-          # course checkout to discard tracked edits and untracked files left
-          # by an earlier run before the exact committed fixture is executed.
           clean: true
           fetch-depth: 1
-          # The job only reads repositories. Do not leave the temporary
-          # GITHUB_TOKEN credential in local git config on a persistent runner.
           persist-credentials: false
 
-      # A PASS is useful only if it can be tied back to the exact course
-      # revision and checker/fixture bytes that produced it. Record those
-      # identities before running either validation layer.
       - name: Record course test provenance
         run: |
           test -z "$(git status --porcelain)"
@@ -44,39 +36,50 @@ jobs:
         working-directory: boot-crash/labs/06-kexec-lifecycle
         run: python3 -m unittest -v test_verify_source_contract.py
 
-      # B06 treats upstream Linux v5.10 as the final implementation fact
-      # baseline. Pin the checkout to the exact commit behind the v5.10 tag,
-      # rather than relying only on a movable ref name in the execution log.
+      # Keep the large upstream tree outside the course checkout. Otherwise a
+      # failed run can leave linux-v5.10/ as an untracked directory inside the
+      # course worktree, weakening the clean-tree provenance boundary until a
+      # later checkout happens to remove it.
+      - name: Prepare isolated upstream workspace
+        shell: bash
+        run: |
+          upstream_dir="${RUNNER_TEMP}/kernel-course-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf -- "$upstream_dir"
+          printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
+
       - name: Checkout upstream Linux v5.10
         uses: actions/checkout@v4
         with:
           repository: torvalds/linux
           ref: 2c85ebc57b3e1817b6ce1a6b703928e113a90442
-          path: linux-v5.10
+          path: ${{ env.B06_UPSTREAM_DIR }}
           fetch-depth: 1
           clean: true
           persist-credentials: false
 
       - name: Verify upstream checkout identity
-        working-directory: linux-v5.10
+        shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = "2c85ebc57b3e1817b6ce1a6b703928e113a90442"
-          test -z "$(git status --porcelain)"
-          git show -s --format='upstream HEAD=%H %s' HEAD
+          test "$(git -C "$B06_UPSTREAM_DIR" rev-parse HEAD)" = "2c85ebc57b3e1817b6ce1a6b703928e113a90442"
+          test -z "$(git -C "$B06_UPSTREAM_DIR" status --porcelain)"
+          git -C "$B06_UPSTREAM_DIR" show -s --format='upstream HEAD=%H %s' HEAD
 
       - name: Verify upstream Linux v5.10 source contracts
-        run: python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py linux-v5.10
+        run: python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py "$B06_UPSTREAM_DIR"
 
-      # A persistent self-hosted runner reuses its work directory. The Linux
-      # checkout is large and must not be left behind after either success or
-      # failure; otherwise repeated course runs accumulate disk usage and can
-      # make later validation fail for infrastructure rather than source
-      # reasons. `always()` makes cleanup run after a failed checker as well.
-      - name: Clean upstream checkout from persistent runner
+      - name: Verify course checkout remained clean
+        if: ${{ always() }}
+        shell: bash
+        run: test -z "$(git status --porcelain)"
+
+      # A persistent self-hosted runner reuses its work directory. Delete the
+      # isolated upstream tree after success or failure so repeated validation
+      # cannot accumulate Linux source trees in RUNNER_TEMP.
+      - name: Clean isolated upstream checkout
         if: ${{ always() }}
         shell: bash
         run: |
-          if [[ -d linux-v5.10 ]]; then
-            rm -rf -- linux-v5.10
+          if [[ -n "${B06_UPSTREAM_DIR:-}" && -e "$B06_UPSTREAM_DIR" ]]; then
+            rm -rf -- "$B06_UPSTREAM_DIR"
           fi
-          test ! -e linux-v5.10
+          [[ -z "${B06_UPSTREAM_DIR:-}" || ! -e "$B06_UPSTREAM_DIR" ]]
