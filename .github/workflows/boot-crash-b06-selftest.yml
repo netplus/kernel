@@ -66,7 +66,18 @@ jobs:
 
       - name: Run exact committed B06 fixture suite
         working-directory: boot-crash/labs/06-kexec-lifecycle
-        run: python3 -m unittest -v test_verify_source_contract.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          trap 'rm -f "$output"' EXIT
+          python3 -m unittest -v test_verify_source_contract.py 2>&1 | tee "$output"
+          # Success alone is insufficient for the B06 completion contract: a
+          # discovery regression could otherwise run fewer tests and still
+          # return exit code 0. Bind the execution evidence to the reviewed
+          # 22-case fixture count as well as to its exact Git blob above.
+          grep -Eq '^Ran 22 tests in ' "$output"
+          grep -Eq '^OK$' "$output"
 
       # actions/checkout's path input is relative to GITHUB_WORKSPACE and must
       # stay underneath it. Use a hidden sibling directory inside the course
