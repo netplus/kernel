@@ -16,6 +16,21 @@ jobs:
     steps:
       - name: Checkout course repository
         uses: actions/checkout@v4
+
       - name: Run exact committed B06 fixture suite
         working-directory: boot-crash/labs/06-kexec-lifecycle
         run: python3 -m unittest -v test_verify_source_contract.py
+
+      # B06 treats upstream Linux v5.10 as the final implementation fact
+      # baseline. Materialize that exact tag in the same job so the fixture
+      # self-test and the real-source L1 check are provenance-linked.
+      - name: Checkout upstream Linux v5.10
+        uses: actions/checkout@v4
+        with:
+          repository: torvalds/linux
+          ref: v5.10
+          path: linux-v5.10
+          fetch-depth: 1
+
+      - name: Verify upstream Linux v5.10 source contracts
+        run: python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py linux-v5.10
