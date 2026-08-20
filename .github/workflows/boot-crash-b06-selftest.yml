@@ -67,14 +67,20 @@ jobs:
           grep -Eq '^Ran 22 tests in ' "$output"
           grep -Eq '^OK$' "$output"
 
+      # actions/checkout requires its path input to be a path under
+      # GITHUB_WORKSPACE. Keep that action input static instead of depending on
+      # a value written to GITHUB_ENV by an earlier shell step: GITHUB_ENV is a
+      # runtime shell-environment mechanism, whereas `with:` expressions are
+      # evaluated by the Actions runner before the action is invoked. A fixed
+      # relative path removes that evaluation-order dependency. The directory
+      # is explicitly removed before checkout and again in an always() step.
       - name: Prepare isolated upstream workspace
         shell: bash
         run: |
           set -euo pipefail
-          upstream_rel=".b06-upstream-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          upstream_rel=.b06-upstream-linux-v5.10
           upstream_dir="${GITHUB_WORKSPACE}/${upstream_rel}"
           rm -rf -- "$upstream_dir"
-          printf 'B06_UPSTREAM_REL=%s\n' "$upstream_rel" >> "$GITHUB_ENV"
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
       - name: Checkout upstream Linux v5.10
@@ -82,7 +88,7 @@ jobs:
         with:
           repository: torvalds/linux
           ref: 2c85ebc57b3e1817b6ce1a6b703928e113a90442
-          path: ${{ env.B06_UPSTREAM_REL }}
+          path: .b06-upstream-linux-v5.10
           fetch-depth: 1
           clean: true
           persist-credentials: false
