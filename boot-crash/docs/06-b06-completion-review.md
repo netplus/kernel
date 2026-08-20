@@ -148,7 +148,22 @@ fixture coverage 已经覆盖 7 组 checker contract 的独立 assertion；不�
 
 ## 8. 执行环境与成本边界
 
-当前可用执行环境此前在 materialize GitHub / raw GitHub 文件时遇到 DNS 解析失败，因此不能把“connector 能读取源码”误写成“本地 Python 已执行 exact committed files”。这是执行环境 blocker，不是 checker failure，也不是 upstream v5.10 source failure。
+当前可用执行环境在 materialize GitHub / raw GitHub 文件时遇到 DNS 解析失败，因此不能把“connector 能读取源码”误写成“本地 Python 已执行 exact committed files”。这是执行环境 blocker，不是 checker failure，也不是 upstream v5.10 source failure。
+
+2026-08-20 再次在当前零新增费用执行环境中实际尝试：
+
+```text
+git clone --depth 1 https://github.com/netplus/kernel.git /tmp/kernelrepo
+```
+
+命令在 clone 内容落盘前失败，实际错误为：
+
+```text
+fatal: unable to access 'https://github.com/netplus/kernel.git/':
+Could not resolve host: github.com
+```
+
+因此本次仍不能执行当前 exact 22-case suite，也不能 materialize upstream `v5.10` tree 后运行 7/7 L1 checker。该结果只证明当前本地执行环境的 DNS/network blocker 仍存在；GitHub connector 的仓库读取/写入能力不能替代本地 Python、Git checkout 或 source-tree CLI 的执行证据。
 
 `.github/workflows/boot-crash-b06-selftest.yml` 只允许手工触发，并要求 `[self-hosted, linux, x64, kernel-course]` runner。当前没有额外 runner 预算，不应为了取得 PASS 静默改用可能产生费用的 GitHub-hosted runner。
 
