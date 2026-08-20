@@ -163,7 +163,9 @@ fatal: unable to access 'https://github.com/netplus/kernel.git/':
 Could not resolve host: github.com
 ```
 
-因此本次仍不能执行当前 exact 22-case suite，也不能 materialize upstream `v5.10` tree 后运行 7/7 L1 checker。该结果只证明当前本地执行环境的 DNS/network blocker 仍存在；GitHub connector 的仓库读取/写入能力不能替代本地 Python、Git checkout 或 source-tree CLI 的执行证据。
+本轮再次执行同一类 materialization 检查，DNS 仍在 clone 内容落盘前失败。由于失败发生在仓库内容可供本地 Python 使用之前，本轮没有执行 22-case suite，也没有执行 upstream 7/7 checker；不得把 connector 读取成功解释为自动验收成功。
+
+因此当前仍不能执行当前 exact 22-case suite，也不能 materialize upstream `v5.10` tree 后运行 7/7 L1 checker。该结果只证明当前本地执行环境的 DNS/network blocker 仍存在；GitHub connector 的仓库读取/写入能力不能替代本地 Python、Git checkout 或 source-tree CLI 的执行证据。
 
 `.github/workflows/boot-crash-b06-selftest.yml` 只允许手工触发，并要求 `[self-hosted, linux, x64, kernel-course]` runner。当前没有额外 runner 预算，不应为了取得 PASS 静默改用可能产生费用的 GitHub-hosted runner。
 
