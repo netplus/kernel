@@ -24,6 +24,12 @@ jobs:
           clean: true
           fetch-depth: 1
           persist-credentials: false
+          # checkout defaults this to true and writes the workspace into the
+          # runner user's global Git safe.directory list. A persistent
+          # self-hosted runner does not need that mutation when checkout and
+          # validation run as the runner user; avoiding it keeps repeated B06
+          # runs from accumulating machine-global Git configuration state.
+          set-safe-directory: false
 
       - name: Record and verify course test provenance
         shell: bash
@@ -86,6 +92,10 @@ jobs:
           fetch-depth: 1
           clean: true
           persist-credentials: false
+          # B06_UPSTREAM_REL is unique per run. Leaving checkout's default
+          # enabled would append a fresh path to global safe.directory on
+          # every run even though the source tree is deleted afterwards.
+          set-safe-directory: false
 
       - name: Verify upstream checkout identity
         shell: bash
