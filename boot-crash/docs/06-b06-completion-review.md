@@ -2,6 +2,8 @@
 
 本文复核 B06《Kexec 解决什么问题》是否达到独立收章标准。源码事实基线固定为 **upstream Linux v5.10，x86-64**。本文件必须与实验目录中的 `selftest-results.md` 保持同一证据状态；历史 fixture PASS 不得继承给后来修改过的 checker/fixture revision。
 
+> 当前领域入口 `boot-crash/README.md` 仍残留旧的“B06【已完成】、9-case PASS”描述。该入口状态已经失效；在 README 完成同步修正前，以本文和 `labs/06-kexec-lifecycle/selftest-results.md` 的证据状态为准。README 的修正属于 B06 收章前必须完成的一致性工作，不能据旧入口进入 B07。
+
 复核材料：
 
 - [`06-kexec-why-and-lifecycle.md`](06-kexec-why-and-lifecycle.md)
@@ -164,4 +166,4 @@ B. 用同一个 verify_source_contract.py 对 upstream Linux v5.10
    要求：7 组 source-contract 全部 PASS
 ```
 
-只有 A、B 都建立可复核执行证据后，才能恢复 B06 的【已完成】状态并进入 B07。任一执行失败时，具体 failure 本身就是下一最小修正单元，必须回到 upstream v5.10 源码判断是 checker、fixture 还是课程结论需要修正，不能通过放宽 matcher 获得表面 PASS。
+只有 A、B 都建立可复核执行证据，并且领域 README 同步到这一证据状态后，才能恢复 B06 的【已完成】状态并进入 B07。任一执行失败时，具体 failure 本身就是下一最小修正单元，必须回到 upstream v5.10 源码判断是 checker、fixture 还是课程结论需要修正，不能通过放宽 matcher 获得表面 PASS。
