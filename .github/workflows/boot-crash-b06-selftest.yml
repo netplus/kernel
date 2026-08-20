@@ -13,9 +13,22 @@ jobs:
     # self-hosted Linux/x86-64 runner instead of silently consuming hosted
     # runner minutes.
     runs-on: [self-hosted, linux, x64, kernel-course]
+    timeout-minutes: 30
     steps:
       - name: Checkout course repository
         uses: actions/checkout@v4
+
+      # A PASS is useful only if it can be tied back to the exact course
+      # revision and checker/fixture bytes that produced it. Record those
+      # identities before running either validation layer.
+      - name: Record course test provenance
+        run: |
+          git show -s --format='course HEAD=%H %s' HEAD
+          printf 'checker blob='
+          git hash-object boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
+          printf 'fixture blob='
+          git hash-object boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
+          python3 --version
 
       - name: Run exact committed B06 fixture suite
         working-directory: boot-crash/labs/06-kexec-lifecycle
