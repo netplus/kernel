@@ -146,11 +146,11 @@ upstream v5.10 人工 L1 事实复核：            已完成
 
 fixture coverage 已经覆盖 7 组 checker contract 的独立 assertion；不再为了增加 case 数继续扩 synthetic fixture。下一步必须转向真实执行证据。
 
-## 8. 执行环境与成本边界
+## 8. 执行环境、self-hosted 验收路径与成本边界
 
 当前可用执行环境在 materialize GitHub / raw GitHub 文件时遇到 DNS 解析失败，因此不能把“connector 能读取源码”误写成“本地 Python 已执行 exact committed files”。这是执行环境 blocker，不是 checker failure，也不是 upstream v5.10 source failure。
 
-2026-08-20 再次在当前零新增费用执行环境中实际尝试：
+2026-08-20 在当前零新增费用执行环境中实际尝试：
 
 ```text
 git clone --depth 1 https://github.com/netplus/kernel.git /tmp/kernelrepo
@@ -163,11 +163,24 @@ fatal: unable to access 'https://github.com/netplus/kernel.git/':
 Could not resolve host: github.com
 ```
 
-本轮再次执行同一类 materialization 检查，DNS 仍在 clone 内容落盘前失败。由于失败发生在仓库内容可供本地 Python 使用之前，本轮没有执行 22-case suite，也没有执行 upstream 7/7 checker；不得把 connector 读取成功解释为自动验收成功。
+因此当前环境仍不能执行当前 exact 22-case suite，也不能 materialize upstream `v5.10` tree 后运行 7/7 L1 checker。该结果只证明当前本地执行环境的 DNS/network blocker；GitHub connector 的仓库读取/写入能力不能替代本地 Python、Git checkout 或 source-tree CLI 的执行证据。
 
-因此当前仍不能执行当前 exact 22-case suite，也不能 materialize upstream `v5.10` tree 后运行 7/7 L1 checker。该结果只证明当前本地执行环境的 DNS/network blocker 仍存在；GitHub connector 的仓库读取/写入能力不能替代本地 Python、Git checkout 或 source-tree CLI 的执行证据。
+仓库已经提供 `.github/workflows/boot-crash-b06-selftest.yml` 作为零新增 runner 费用优先的验收入口。该 workflow 具有以下边界：
 
-`.github/workflows/boot-crash-b06-selftest.yml` 只允许手工触发，并要求 `[self-hosted, linux, x64, kernel-course]` runner。当前没有额外 runner 预算，不应为了取得 PASS 静默改用可能产生费用的 GitHub-hosted runner。
+```text
+触发方式：workflow_dispatch（仅手工触发）
+runner labels：[self-hosted, linux, x64, kernel-course]
+GitHub-hosted runner：不使用
+course fixture：执行当前 checkout 中的 test_verify_source_contract.py
+upstream source：直接 checkout 精确 commit
+                2c85ebc57b3e1817b6ce1a6b703928e113a90442
+identity gate：git rev-parse HEAD 必须严格等于上述 commit
+upstream L1：同一 verify_source_contract.py 检查 linux-v5.10/
+```
+
+因此，一次成功的该 workflow run 可以同时提供两个 B06 硬门槛所需的原始执行输出：当前 committed fixture suite，以及精确 upstream v5.10 commit 上的 7 组 source-contract。**workflow 已存在不等于验收已经通过**；只有实际 run 的日志显示 fixture 全部通过、identity gate 通过且 upstream checker 7/7 PASS，才能把状态改为已建立。
+
+当前没有额外 runner 预算。若尚未注册满足 `[self-hosted, linux, x64, kernel-course]` 的 runner，workflow 等待/无法调度属于基础设施 blocker；不得为了取得表面 PASS 静默改用可能产生费用的 GitHub-hosted runner。
 
 ## 9. 收章判定
 
