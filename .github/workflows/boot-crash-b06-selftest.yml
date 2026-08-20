@@ -36,15 +36,18 @@ jobs:
         working-directory: boot-crash/labs/06-kexec-lifecycle
         run: python3 -m unittest -v test_verify_source_contract.py
 
-      # Keep the large upstream tree outside the course checkout. Otherwise a
-      # failed run can leave linux-v5.10/ as an untracked directory inside the
-      # course worktree, weakening the clean-tree provenance boundary until a
-      # later checkout happens to remove it.
+      # actions/checkout's path input is relative to GITHUB_WORKSPACE and must
+      # stay underneath it. Use a hidden sibling directory inside the course
+      # checkout, then remove it unconditionally. The final clean-tree gate
+      # runs after cleanup so the recorded course provenance still proves that
+      # no upstream checkout or test artifact remains in the worktree.
       - name: Prepare isolated upstream workspace
         shell: bash
         run: |
-          upstream_dir="${RUNNER_TEMP}/kernel-course-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          upstream_rel=".b06-upstream-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          upstream_dir="${GITHUB_WORKSPACE}/${upstream_rel}"
           rm -rf -- "$upstream_dir"
+          printf 'B06_UPSTREAM_REL=%s\n' "$upstream_rel" >> "$GITHUB_ENV"
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
       - name: Checkout upstream Linux v5.10
@@ -52,7 +55,7 @@ jobs:
         with:
           repository: torvalds/linux
           ref: 2c85ebc57b3e1817b6ce1a6b703928e113a90442
-          path: ${{ env.B06_UPSTREAM_DIR }}
+          path: ${{ env.B06_UPSTREAM_REL }}
           fetch-depth: 1
           clean: true
           persist-credentials: false
@@ -67,14 +70,10 @@ jobs:
       - name: Verify upstream Linux v5.10 source contracts
         run: python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py "$B06_UPSTREAM_DIR"
 
-      - name: Verify course checkout remained clean
-        if: ${{ always() }}
-        shell: bash
-        run: test -z "$(git status --porcelain)"
-
       # A persistent self-hosted runner reuses its work directory. Delete the
       # isolated upstream tree after success or failure so repeated validation
-      # cannot accumulate Linux source trees in RUNNER_TEMP.
+      # cannot accumulate Linux source trees or weaken the course clean-tree
+      # provenance boundary.
       - name: Clean isolated upstream checkout
         if: ${{ always() }}
         shell: bash
@@ -83,3 +82,8 @@ jobs:
             rm -rf -- "$B06_UPSTREAM_DIR"
           fi
           [[ -z "${B06_UPSTREAM_DIR:-}" || ! -e "$B06_UPSTREAM_DIR" ]]
+
+      - name: Verify course checkout remained clean
+        if: ${{ always() }}
+        shell: bash
+        run: test -z "$(git status --porcelain)"
