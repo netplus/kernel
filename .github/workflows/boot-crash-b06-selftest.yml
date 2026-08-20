@@ -15,8 +15,11 @@ jobs:
     runs-on: [self-hosted, linux, x64, kernel-course]
     timeout-minutes: 30
     steps:
+      # Pin third-party actions by full commit SHA so a future movement of a
+      # mutable major-version tag cannot change the executable used to produce
+      # B06 completion evidence. This SHA is actions/checkout v4.4.0.
       - name: Checkout course repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           clean: true
           fetch-depth: 1
@@ -75,7 +78,7 @@ jobs:
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
       - name: Checkout upstream Linux v5.10
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: torvalds/linux
           ref: 2c85ebc57b3e1817b6ce1a6b703928e113a90442
