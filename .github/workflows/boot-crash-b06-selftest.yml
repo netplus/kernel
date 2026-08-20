@@ -31,17 +31,26 @@ jobs:
 
           checker=boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
           fixture=boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
+          expected_checker_blob=5c89b67628cf55560089656d5b65e80ff74c556f
+          expected_fixture_blob=f18918cfbe0b01ffba59be3ac083a9971295a2f8
 
           checker_committed="$(git rev-parse "HEAD:${checker}")"
           checker_worktree="$(git hash-object "$checker")"
           fixture_committed="$(git rev-parse "HEAD:${fixture}")"
           fixture_worktree="$(git hash-object "$fixture")"
 
+          printf 'checker expected blob=%s\n' "$expected_checker_blob"
           printf 'checker committed blob=%s\n' "$checker_committed"
           printf 'checker worktree blob=%s\n' "$checker_worktree"
+          printf 'fixture expected blob=%s\n' "$expected_fixture_blob"
           printf 'fixture committed blob=%s\n' "$fixture_committed"
           printf 'fixture worktree blob=%s\n' "$fixture_worktree"
 
+          # B06 completion evidence is defined for this exact checker/fixture
+          # pair. A later edit must update the reviewed evidence baseline
+          # instead of silently inheriting PASS from an older revision.
+          test "$checker_committed" = "$expected_checker_blob"
+          test "$fixture_committed" = "$expected_fixture_blob"
           test "$checker_worktree" = "$checker_committed"
           test "$fixture_worktree" = "$fixture_committed"
           python3 --version
@@ -58,6 +67,7 @@ jobs:
       - name: Prepare isolated upstream workspace
         shell: bash
         run: |
+          set -euo pipefail
           upstream_rel=".b06-upstream-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           upstream_dir="${GITHUB_WORKSPACE}/${upstream_rel}"
           rm -rf -- "$upstream_dir"
@@ -77,6 +87,7 @@ jobs:
       - name: Verify upstream checkout identity
         shell: bash
         run: |
+          set -euo pipefail
           test "$(git -C "$B06_UPSTREAM_DIR" rev-parse HEAD)" = "2c85ebc57b3e1817b6ce1a6b703928e113a90442"
           test -z "$(git -C "$B06_UPSTREAM_DIR" status --porcelain)"
           git -C "$B06_UPSTREAM_DIR" show -s --format='upstream HEAD=%H %s' HEAD
@@ -92,6 +103,7 @@ jobs:
         if: ${{ always() }}
         shell: bash
         run: |
+          set -euo pipefail
           if [[ -n "${B06_UPSTREAM_DIR:-}" && -e "$B06_UPSTREAM_DIR" ]]; then
             rm -rf -- "$B06_UPSTREAM_DIR"
           fi
@@ -100,4 +112,6 @@ jobs:
       - name: Verify course checkout remained clean
         if: ${{ always() }}
         shell: bash
-        run: test -z "$(git status --porcelain)"
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
