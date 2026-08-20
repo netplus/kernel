@@ -24,11 +24,6 @@ jobs:
           clean: true
           fetch-depth: 1
           persist-credentials: false
-          # checkout defaults this to true and writes the workspace into the
-          # runner user's global Git safe.directory list. A persistent
-          # self-hosted runner does not need that mutation when checkout and
-          # validation run as the runner user; avoiding it keeps repeated B06
-          # runs from accumulating machine-global Git configuration state.
           set-safe-directory: false
 
       - name: Record and verify course test provenance
@@ -55,9 +50,6 @@ jobs:
           printf 'fixture committed blob=%s\n' "$fixture_committed"
           printf 'fixture worktree blob=%s\n' "$fixture_worktree"
 
-          # B06 completion evidence is defined for this exact checker/fixture
-          # pair. A later edit must update the reviewed evidence baseline
-          # instead of silently inheriting PASS from an older revision.
           test "$checker_committed" = "$expected_checker_blob"
           test "$fixture_committed" = "$expected_fixture_blob"
           test "$checker_worktree" = "$checker_committed"
@@ -72,18 +64,9 @@ jobs:
           output="$(mktemp)"
           trap 'rm -f "$output"' EXIT
           python3 -m unittest -v test_verify_source_contract.py 2>&1 | tee "$output"
-          # Success alone is insufficient for the B06 completion contract: a
-          # discovery regression could otherwise run fewer tests and still
-          # return exit code 0. Bind the execution evidence to the reviewed
-          # 22-case fixture count as well as to its exact Git blob above.
           grep -Eq '^Ran 22 tests in ' "$output"
           grep -Eq '^OK$' "$output"
 
-      # actions/checkout's path input is relative to GITHUB_WORKSPACE and must
-      # stay underneath it. Use a hidden sibling directory inside the course
-      # checkout, then remove it unconditionally. The final clean-tree gate
-      # runs after cleanup so the recorded course provenance still proves that
-      # no upstream checkout or test artifact remains in the worktree.
       - name: Prepare isolated upstream workspace
         shell: bash
         run: |
@@ -103,9 +86,6 @@ jobs:
           fetch-depth: 1
           clean: true
           persist-credentials: false
-          # B06_UPSTREAM_REL is unique per run. Leaving checkout's default
-          # enabled would append a fresh path to global safe.directory on
-          # every run even though the source tree is deleted afterwards.
           set-safe-directory: false
 
       - name: Verify upstream checkout identity
@@ -117,12 +97,24 @@ jobs:
           git -C "$B06_UPSTREAM_DIR" show -s --format='upstream HEAD=%H %s' HEAD
 
       - name: Verify upstream Linux v5.10 source contracts
-        run: python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py "$B06_UPSTREAM_DIR"
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          trap 'rm -f "$output"' EXIT
+          python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py "$B06_UPSTREAM_DIR" 2>&1 | tee "$output"
 
-      # A persistent self-hosted runner reuses its work directory. Delete the
-      # isolated upstream tree after success or failure so repeated validation
-      # cannot accumulate Linux source trees or weaken the course clean-tree
-      # provenance boundary.
+          # The checker exit code proves that no contract raised CheckError,
+          # but B06 completion specifically requires all seven reviewed L1
+          # groups. Assert the emitted evidence as well, so a future checker
+          # regression that accidentally returns success after fewer groups
+          # cannot be recorded as 7/7 PASS.
+          test "$(grep -Ec '^PASS [1-7]: ' "$output")" -eq 7
+          for group in 1 2 3 4 5 6 7; do
+            grep -Eq "^PASS ${group}: " "$output"
+          done
+          grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$output"
+
       - name: Clean isolated upstream checkout
         if: ${{ always() }}
         shell: bash
