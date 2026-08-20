@@ -6,6 +6,15 @@ on:
 permissions:
   contents: read
 
+# The upstream checkout uses a fixed workspace-relative directory and the
+# evidence is intended to describe one exact validation run. Serialize manual
+# B06 validations instead of allowing overlapping runs to race on a persistent
+# self-hosted runner/workspace. Do not cancel an in-flight evidence-producing
+# run when another manual dispatch is queued.
+concurrency:
+  group: boot-crash-b06-selftest
+  cancel-in-progress: false
+
 jobs:
   selftest:
     # This repository currently has no budget reserved for GitHub-hosted
