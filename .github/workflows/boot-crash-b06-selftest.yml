@@ -17,12 +17,22 @@ jobs:
     steps:
       - name: Checkout course repository
         uses: actions/checkout@v4
+        with:
+          # A persistent self-hosted runner reuses its workspace. Require the
+          # course checkout to discard tracked edits and untracked files left
+          # by an earlier run before the exact committed fixture is executed.
+          clean: true
+          fetch-depth: 1
+          # The job only reads repositories. Do not leave the temporary
+          # GITHUB_TOKEN credential in local git config on a persistent runner.
+          persist-credentials: false
 
       # A PASS is useful only if it can be tied back to the exact course
       # revision and checker/fixture bytes that produced it. Record those
       # identities before running either validation layer.
       - name: Record course test provenance
         run: |
+          test -z "$(git status --porcelain)"
           git show -s --format='course HEAD=%H %s' HEAD
           printf 'checker blob='
           git hash-object boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
@@ -44,11 +54,14 @@ jobs:
           ref: 2c85ebc57b3e1817b6ce1a6b703928e113a90442
           path: linux-v5.10
           fetch-depth: 1
+          clean: true
+          persist-credentials: false
 
       - name: Verify upstream checkout identity
         working-directory: linux-v5.10
         run: |
           test "$(git rev-parse HEAD)" = "2c85ebc57b3e1817b6ce1a6b703928e113a90442"
+          test -z "$(git status --porcelain)"
           git show -s --format='upstream HEAD=%H %s' HEAD
 
       - name: Verify upstream Linux v5.10 source contracts
