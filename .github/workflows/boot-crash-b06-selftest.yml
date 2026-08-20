@@ -22,14 +22,28 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Record course test provenance
+      - name: Record and verify course test provenance
+        shell: bash
         run: |
+          set -euo pipefail
           test -z "$(git status --porcelain)"
           git show -s --format='course HEAD=%H %s' HEAD
-          printf 'checker blob='
-          git hash-object boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
-          printf 'fixture blob='
-          git hash-object boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
+
+          checker=boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
+          fixture=boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
+
+          checker_committed="$(git rev-parse "HEAD:${checker}")"
+          checker_worktree="$(git hash-object "$checker")"
+          fixture_committed="$(git rev-parse "HEAD:${fixture}")"
+          fixture_worktree="$(git hash-object "$fixture")"
+
+          printf 'checker committed blob=%s\n' "$checker_committed"
+          printf 'checker worktree blob=%s\n' "$checker_worktree"
+          printf 'fixture committed blob=%s\n' "$fixture_committed"
+          printf 'fixture worktree blob=%s\n' "$fixture_worktree"
+
+          test "$checker_worktree" = "$checker_committed"
+          test "$fixture_worktree" = "$fixture_committed"
           python3 --version
 
       - name: Run exact committed B06 fixture suite
