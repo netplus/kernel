@@ -15,6 +15,28 @@ jobs:
     runs-on: [self-hosted, linux, x64, kernel-course]
     timeout-minutes: 30
     steps:
+      - name: Verify runner prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v git
+          command -v python3
+          git --version
+          python3 --version
+          # verify_source_contract.py uses PEP 585 built-in generic syntax
+          # such as list[tuple[str, str]], which requires Python >= 3.9.
+          python3 - <<'PY'
+          import sys
+          required = (3, 9)
+          print(f"python executable={sys.executable}")
+          print(f"python version={sys.version.split()[0]}")
+          if sys.version_info < required:
+              raise SystemExit(
+                  f"B06 checker requires Python >= {required[0]}.{required[1]}; "
+                  f"runner provides {sys.version.split()[0]}"
+              )
+          PY
+
       # Pin third-party actions by full commit SHA so a future movement of a
       # mutable major-version tag cannot change the executable used to produce
       # B06 completion evidence. This SHA is actions/checkout v4.4.0.
@@ -67,13 +89,6 @@ jobs:
           grep -Eq '^Ran 22 tests in ' "$output"
           grep -Eq '^OK$' "$output"
 
-      # actions/checkout requires its path input to be a path under
-      # GITHUB_WORKSPACE. Keep that action input static instead of depending on
-      # a value written to GITHUB_ENV by an earlier shell step: GITHUB_ENV is a
-      # runtime shell-environment mechanism, whereas `with:` expressions are
-      # evaluated by the Actions runner before the action is invoked. A fixed
-      # relative path removes that evaluation-order dependency. The directory
-      # is explicitly removed before checkout and again in an always() step.
       - name: Prepare isolated upstream workspace
         shell: bash
         run: |
@@ -110,11 +125,6 @@ jobs:
           trap 'rm -f "$output"' EXIT
           python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py "$B06_UPSTREAM_DIR" 2>&1 | tee "$output"
 
-          # The checker exit code proves that no contract raised CheckError,
-          # but B06 completion specifically requires all seven reviewed L1
-          # groups. Assert the emitted evidence as well, so a future checker
-          # regression that accidentally returns success after fewer groups
-          # cannot be recorded as 7/7 PASS.
           test "$(grep -Ec '^PASS [1-7]: ' "$output")" -eq 7
           for group in 1 2 3 4 5 6 7; do
             grep -Eq "^PASS ${group}: " "$output"
