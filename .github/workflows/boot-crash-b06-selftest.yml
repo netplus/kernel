@@ -23,16 +23,35 @@ jobs:
           command -v python3
           git --version
           python3 --version
-          # verify_source_contract.py uses PEP 585 built-in generic syntax
-          # such as list[tuple[str, str]], which requires Python >= 3.9.
+          # actions/checkout v4 falls back to the GitHub REST API when Git
+          # 2.18+ is unavailable. B06 provenance gates require a real .git
+          # repository (rev-parse/status/hash-object), so fail early instead
+          # of allowing that fallback to produce a later, misleading error.
+          # verify_source_contract.py also uses PEP 585 built-in generic
+          # syntax such as list[tuple[str, str]], which requires Python >= 3.9.
           python3 - <<'PY'
+          import re
+          import subprocess
           import sys
-          required = (3, 9)
+
+          git_text = subprocess.check_output(
+              ["git", "--version"], text=True
+          ).strip()
+          match = re.search(r"git version (\d+)\.(\d+)", git_text)
+          if not match:
+              raise SystemExit(f"cannot parse Git version: {git_text!r}")
+          git_version = tuple(map(int, match.groups()))
+          if git_version < (2, 18):
+              raise SystemExit(
+                  f"B06 workflow requires Git >= 2.18; runner provides {git_text}"
+              )
+
+          required_python = (3, 9)
           print(f"python executable={sys.executable}")
           print(f"python version={sys.version.split()[0]}")
-          if sys.version_info < required:
+          if sys.version_info < required_python:
               raise SystemExit(
-                  f"B06 checker requires Python >= {required[0]}.{required[1]}; "
+                  f"B06 checker requires Python >= {required_python[0]}.{required_python[1]}; "
                   f"runner provides {sys.version.split()[0]}"
               )
           PY
