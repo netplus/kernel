@@ -53,3 +53,17 @@ jobs:
 
       - name: Verify upstream Linux v5.10 source contracts
         run: python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py linux-v5.10
+
+      # A persistent self-hosted runner reuses its work directory. The Linux
+      # checkout is large and must not be left behind after either success or
+      # failure; otherwise repeated course runs accumulate disk usage and can
+      # make later validation fail for infrastructure rather than source
+      # reasons. `always()` makes cleanup run after a failed checker as well.
+      - name: Clean upstream checkout from persistent runner
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [[ -d linux-v5.10 ]]; then
+            rm -rf -- linux-v5.10
+          fi
+          test ! -e linux-v5.10
