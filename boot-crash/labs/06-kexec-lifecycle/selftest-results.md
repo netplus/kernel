@@ -179,6 +179,45 @@ Attempts to materialize the exact files from the current local execution environ
 
 The repository workflow `.github/workflows/boot-crash-b06-selftest.yml` is intentionally `workflow_dispatch` only and targets `[self-hosted, linux, x64, kernel-course]`. Do not silently switch it to a potentially billable GitHub-hosted runner. Preferred execution order is an already available local environment, then a dedicated low-privilege self-hosted runner, then another zero-new-cost environment capable of executing exact committed files.
 
+The current workflow is itself part of the acceptance boundary. Before it can establish B06 PASS evidence, it now enforces all of the following:
+
+```text
+runner prerequisites:
+  Git >= 2.18
+  Python >= 3.9
+
+course provenance:
+  clean course checkout
+  checker committed blob == 5c89b67628cf55560089656d5b65e80ff74c556f
+  fixture committed blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
+  worktree blobs == committed blobs
+
+fixture evidence:
+  unittest command exits successfully
+  output states exactly "Ran 22 tests ..."
+  output contains a standalone "OK"
+
+upstream provenance:
+  torvalds/linux checkout is pinned to
+  2c85ebc57b3e1817b6ce1a6b703928e113a90442
+  git rev-parse HEAD must equal that commit
+  upstream worktree must be clean
+
+upstream L1 evidence:
+  checker exits successfully
+  exactly seven PASS group lines are present
+  PASS groups 1 through 7 are each present
+  final summary is "PASS: 7 B06 Linux v5.10 source-contract groups"
+
+persistent-runner hygiene:
+  checkout credentials are not persisted
+  checkout does not add safe.directory entries to global Git config
+  temporary upstream checkout is removed on success or failure
+  final course worktree must remain clean
+```
+
+The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific course checker/fixture pair and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
+
 ## 7. Next acceptance action
 
 Fixture coverage review is now closed. The next minimum acceptance unit is execution, not more synthetic cases:
