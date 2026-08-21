@@ -186,6 +186,13 @@ runner prerequisites:
   Git >= 2.18
   Python >= 3.9
 
+run identity and serialization:
+  workflow_dispatch establishes the selected GITHUB_SHA
+  checked-out course HEAD must equal that GITHUB_SHA
+  concurrency group boot-crash-b06-selftest serializes evidence-producing runs
+  cancel-in-progress is false, so a queued manual run does not cancel an
+  already-running validation
+
 course provenance:
   clean course checkout
   checker committed blob == 5c89b67628cf55560089656d5b65e80ff74c556f
@@ -216,7 +223,7 @@ persistent-runner hygiene:
   final course worktree must remain clean
 ```
 
-The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific course checker/fixture pair and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
+The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
 
 ## 7. Next acceptance action
 
@@ -229,7 +236,8 @@ B. run python3 -m unittest -v test_verify_source_contract.py;
 C. run the same verify_source_contract.py against upstream Linux v5.10
    commit 2c85ebc57b3e1817b6ce1a6b703928e113a90442;
    require all 7 source-contract groups to PASS;
-D. record checker blob SHA, fixture blob SHA, upstream commit and outputs;
+D. record dispatch GITHUB_SHA, checked-out course HEAD, checker blob SHA,
+   fixture blob SHA, upstream commit and outputs;
 E. if either execution fails, make that concrete failure the next correction
    unit and resolve it against upstream v5.10 source before changing claims.
 ```
