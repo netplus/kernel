@@ -140,15 +140,31 @@ trap 'rm -f "$fixture_log" "$upstream_log"' EXIT
     cd "$lab"
     python3 -m unittest -v test_verify_source_contract.py
 ) 2>&1 | tee "$fixture_log"
-grep -Eq '^Ran 22 tests in ' "$fixture_log"
-grep -Eq '^OK$' "$fixture_log"
+if ! grep -Eq '^Ran 22 tests in ' "$fixture_log"; then
+    printf 'FAIL: fixture suite did not report exactly the expected 22-test run\n' >&2
+    exit 1
+fi
+if ! grep -Eq '^OK$' "$fixture_log"; then
+    printf 'FAIL: fixture suite did not report unittest OK\n' >&2
+    exit 1
+fi
 
 python3 "$checker" "$upstream" 2>&1 | tee "$upstream_log"
-test "$(grep -Ec '^PASS [1-7]: ' "$upstream_log")" -eq 7
+pass_count="$(grep -Ec '^PASS [1-7]: ' "$upstream_log" || true)"
+if test "$pass_count" -ne 7; then
+    printf 'FAIL: upstream checker must report exactly 7 numbered PASS groups, got %s\n' "$pass_count" >&2
+    exit 1
+fi
 for group in 1 2 3 4 5 6 7; do
-    grep -Eq "^PASS ${group}: " "$upstream_log"
+    if ! grep -Eq "^PASS ${group}: " "$upstream_log"; then
+        printf 'FAIL: upstream checker did not report PASS group %s\n' "$group" >&2
+        exit 1
+    fi
 done
-grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$upstream_log"
+if ! grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$upstream_log"; then
+    printf 'FAIL: upstream checker did not report the exact 7-group summary\n' >&2
+    exit 1
+fi
 
 # The checker and fixture should not mutate the course checkout.
 if test -n "$(git -C "$repo_root" status --porcelain)"; then
