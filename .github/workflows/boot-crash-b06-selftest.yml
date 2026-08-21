@@ -71,6 +71,10 @@ jobs:
       - name: Checkout course repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          # workflow_dispatch selects one exact course revision. Pass it to
+          # checkout explicitly instead of relying on checkout's event-default
+          # ref resolution; the next step independently verifies HEAD == GITHUB_SHA.
+          ref: ${{ github.sha }}
           clean: true
           fetch-depth: 1
           persist-credentials: false
