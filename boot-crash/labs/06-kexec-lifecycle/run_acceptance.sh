@@ -10,10 +10,14 @@ export LC_ALL=C
 # Resolve the course checkout from this script rather than from the caller's
 # current directory. A local acceptance entry point must behave identically
 # when invoked from the repository root or through an absolute script path.
-command -v git >/dev/null || {
-    printf 'FAIL: required command not found: git\n' >&2
-    exit 1
-}
+# dirname is needed before repository discovery, so validate both early
+# commands before using either one.
+for command in git dirname; do
+    command -v "$command" >/dev/null || {
+        printf 'FAIL: required command not found: %s\n' "$command" >&2
+        exit 1
+    }
+done
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(git -C "$script_dir" rev-parse --show-toplevel)"
 lab="$repo_root/boot-crash/labs/06-kexec-lifecycle"
@@ -29,9 +33,10 @@ fixture="$repo_root/$fixture_rel"
 
 # Fail before producing course evidence when the local execution environment
 # does not satisfy the same basic platform/tool contract as the self-hosted
-# workflow. git was checked before repository discovery above; keep it in this
-# list so the complete prerequisite contract remains visible in one place.
-for command in git python3 uname grep tee mktemp rm; do
+# workflow. git and dirname were checked before repository discovery above;
+# keep them in this list so the complete prerequisite contract remains visible
+# in one place.
+for command in git dirname python3 uname grep tee mktemp rm; do
     command -v "$command" >/dev/null || {
         printf 'FAIL: required command not found: %s\n' "$command" >&2
         exit 1
