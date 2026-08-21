@@ -152,6 +152,8 @@ arch/x86/kernel/machine_kexec_64.c
   a29a44a98e5bef10751af769bd198d783e23b9fd
 ```
 
+A fresh repository-API audit on 2026-08-22 fetched these four paths explicitly at commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442` and reconfirmed the same blob identities. This matters because it independently checks that the manual source baseline has not drifted while local Git/DNS access remains unavailable. It is still **source-provenance evidence, not execution evidence**: the connector fetch does not create a local Git worktree on which `verify_source_contract.py` can be executed.
+
 The audit reconfirmed the checker model:
 
 ```text
@@ -175,7 +177,7 @@ This is **manual L1 source revalidation**, not an automated checker PASS.
 
 ## 6. Execution-environment blocker and cost boundary
 
-Attempts to materialize the exact files from the current local execution environment have failed at DNS resolution for `github.com` / `raw.githubusercontent.com`. This is an execution-environment blocker, not a checker failure and not a Linux v5.10 source failure. The GitHub connector can read and update repository content, but it does not expose those files as a local filesystem tree to Python.
+Attempts to materialize the exact files from the current local execution environment have failed at DNS resolution for `github.com` / `raw.githubusercontent.com`. This is an execution-environment blocker, not a checker failure and not a Linux v5.10 source failure. The GitHub connector can read exact repository files (including the upstream files above at a pinned commit) and update course content, but it does not expose those fetched files as a local Git filesystem tree to the acceptance script.
 
 The repository workflow `.github/workflows/boot-crash-b06-selftest.yml` is intentionally `workflow_dispatch` only and targets `[self-hosted, linux, x64, kernel-course]`. Do not silently switch it to a potentially billable GitHub-hosted runner. Preferred execution order is an already available local environment, then a dedicated low-privilege self-hosted runner, then another zero-new-cost environment capable of executing exact committed files.
 
