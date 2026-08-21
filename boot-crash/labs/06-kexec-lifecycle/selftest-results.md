@@ -183,8 +183,11 @@ The current workflow is itself part of the acceptance boundary. Before it can es
 
 ```text
 runner prerequisites:
+  actual uname platform must be Linux on x86-64 (x86_64/amd64)
   Git >= 2.18
   Python >= 3.9
+  git, python3, uname, grep, tee, mktemp and rm must all be available
+  prerequisite failures occur before checkout/test evidence is produced
 
 run identity and serialization:
   workflow_dispatch establishes the selected GITHUB_SHA
