@@ -165,12 +165,20 @@ CONFIG_CRASH_DUMP
 
 脚本从自身路径定位课程仓库，因此调用者不必先 `cd` 到仓库根目录。它不会下载源码；upstream tree 必须由执行者事先准备。这样网络获取与 evidence-producing step 保持分离，也便于在零新增费用的本地或 self-hosted 环境复核。
 
-脚本在产生 PASS 前会机器检查：
+本地入口的 prerequisite contract 是：
 
 ```text
 实际平台：Linux / x86-64
+外部命令：git、dirname、python3、uname、grep、tee、mktemp、rm
 Git >= 2.18
 Python >= 3.9
+```
+
+这些条件在课程证据产生之前检查。缺失命令、平台不匹配或版本过低属于执行环境 blocker，不应记录成 fixture/checker 或 upstream Linux v5.10 的验收失败。
+
+脚本在产生 PASS 前还会机器检查：
+
+```text
 course worktree clean
 checker committed/worktree blob == 5c89b67628cf55560089656d5b65e80ff74c556f
 fixture committed/worktree blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
@@ -327,10 +335,8 @@ isolated-VM L3:                                         not executed
 A. 准备干净的 upstream Linux v5.10 exact tree；
 B. 执行 run_acceptance.sh /path/to/linux-v5.10；
 C. 要求当前 checker/fixture pair 得到 22 tests / OK / exit 0；
-D. 要求同一 checker 在 upstream commit
-   2c85ebc57b3e1817b6ce1a6b703928e113a90442 上得到 7/7；
-E. 记录 course commit、checker blob、fixture blob、upstream commit 和输出；
-F. 任一失败都以 upstream v5.10 源码为准修正，不得放宽契约绕过。
+D. 要求同一 checker 在完整 upstream v5.10 tree 上得到 7/7 L1 PASS；
+E. 将命令、course HEAD、checker/fixture blob、upstream HEAD、完整摘要与退出码写回 selftest-results.md。
 ```
 
-A-E 成立后再恢复 B06 收章状态。
+在 C/D 两项建立前，B06 保持“待自动验收”，不进入 B07。
