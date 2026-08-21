@@ -24,7 +24,12 @@ repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null)" || {
     exit 1
 }
 lab="$repo_root/boot-crash/labs/06-kexec-lifecycle"
-upstream="${1:?usage: run_acceptance.sh /path/to/linux-v5.10}"
+if test "$#" -ne 1; then
+    printf 'FAIL: expected exactly one upstream Linux v5.10 worktree path\n' >&2
+    printf 'usage: %s /path/to/linux-v5.10\n' "$0" >&2
+    exit 2
+fi
+upstream="$1"
 
 expected_upstream=2c85ebc57b3e1817b6ce1a6b703928e113a90442
 expected_checker=5c89b67628cf55560089656d5b65e80ff74c556f
