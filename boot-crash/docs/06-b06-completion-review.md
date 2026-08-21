@@ -165,20 +165,33 @@ Could not resolve host: github.com
 
 因此当前环境仍不能执行当前 exact 22-case suite，也不能 materialize upstream `v5.10` tree 后运行 7/7 L1 checker。该结果只证明当前本地执行环境的 DNS/network blocker；GitHub connector 的仓库读取/写入能力不能替代本地 Python、Git checkout 或 source-tree CLI 的执行证据。
 
-仓库已经提供 `.github/workflows/boot-crash-b06-selftest.yml` 作为零新增 runner 费用优先的验收入口。该 workflow 具有以下边界：
+仓库已经提供 `.github/workflows/boot-crash-b06-selftest.yml` 作为零新增 runner 费用优先的验收入口。当前 workflow 的执行契约已经比最初版本严格得多，收章复核以实际 workflow 为准：
 
 ```text
 触发方式：workflow_dispatch（仅手工触发）
+并发：固定 boot-crash-b06-selftest group，cancel-in-progress=false
 runner labels：[self-hosted, linux, x64, kernel-course]
 GitHub-hosted runner：不使用
-course fixture：执行当前 checkout 中的 test_verify_source_contract.py
-upstream source：直接 checkout 精确 commit
-                2c85ebc57b3e1817b6ce1a6b703928e113a90442
-identity gate：git rev-parse HEAD 必须严格等于上述 commit
-upstream L1：同一 verify_source_contract.py 检查 linux-v5.10/
+timeout：30 分钟
+runner prerequisite：Git >= 2.18，Python >= 3.9
+third-party action：actions/checkout 固定到完整 commit
+                    11d5960a326750d5838078e36cf38b85af677262
+course revision：checkout 显式 ref=${{ github.sha }}，随后要求 HEAD == GITHUB_SHA
+course tree：测试前必须 clean
+checker blob：5c89b67628cf55560089656d5b65e80ff74c556f
+fixture blob：f18918cfbe0b01ffba59be3ac083a9971295a2f8
+blob gate：HEAD committed blob == expected blob == worktree blob
+fixture gate：unittest exit 0，且日志必须明确 Ran 22 tests + OK
+upstream source：checkout 到 workspace 内隔离目录 .b06-upstream-linux-v5.10
+upstream commit：2c85ebc57b3e1817b6ce1a6b703928e113a90442
+upstream identity：HEAD 必须严格等于上述 commit，且 upstream tree clean
+upstream L1：同一 verify_source_contract.py 执行真实源码检查
+7/7 gate：恰好 7 条 PASS group，编号 1..7 完整，最终 summary 为 7 groups PASS
+credentials / Git global state：不持久化 checkout credentials，不写 safe.directory
+cleanup：无论成功失败都删除临时 upstream checkout；最终 course tree 必须 clean
 ```
 
-因此，一次成功的该 workflow run 可以同时提供两个 B06 硬门槛所需的原始执行输出：当前 committed fixture suite，以及精确 upstream v5.10 commit 上的 7 组 source-contract。**workflow 已存在不等于验收已经通过**；只有实际 run 的日志显示 fixture 全部通过、identity gate 通过且 upstream checker 7/7 PASS，才能把状态改为已建立。
+这里的 machine gates 定义的是**什么样的未来 run 才能成为 B06 收章证据**，并不意味着当前已经 PASS。一次成功的 workflow run 必须同时留下可复核的 `GITHUB_SHA → course HEAD → checker/fixture exact blobs → 22/22 → exact upstream v5.10 commit → 7/7` 证据链。
 
 当前没有额外 runner 预算。若尚未注册满足 `[self-hosted, linux, x64, kernel-course]` 的 runner，workflow 等待/无法调度属于基础设施 blocker；不得为了取得表面 PASS 静默改用可能产生费用的 GitHub-hosted runner。
 
