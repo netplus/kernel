@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
-# Run the two B06 hard acceptance gates without GitHub Actions.  The caller
+# Run the two B06 hard acceptance gates without GitHub Actions. The caller
 # supplies an already-materialized upstream Linux v5.10 tree; this keeps the
 # script usable in a zero-new-cost local/self-hosted environment and avoids
 # hiding network acquisition inside the evidence-producing step.
@@ -13,20 +14,67 @@ upstream="${1:?usage: run_acceptance.sh /path/to/linux-v5.10}"
 expected_upstream=2c85ebc57b3e1817b6ce1a6b703928e113a90442
 expected_checker=5c89b67628cf55560089656d5b65e80ff74c556f
 expected_fixture=f18918cfbe0b01ffba59be3ac083a9971295a2f8
-checker="$lab/verify_source_contract.py"
-fixture="$lab/test_verify_source_contract.py"
+checker_rel=boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
+fixture_rel=boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
+checker="$repo_root/$checker_rel"
+fixture="$repo_root/$fixture_rel"
 
-for command in git python3 grep tee mktemp rm; do
-    command -v "$command" >/dev/null
+# Fail before producing course evidence when the local execution environment
+# does not satisfy the same basic platform/tool contract as the self-hosted
+# workflow.
+for command in git python3 uname grep tee mktemp rm; do
+    command -v "$command" >/dev/null || {
+        printf 'FAIL: required command not found: %s\n' "$command" >&2
+        exit 1
+    }
 done
 
-# Bind the run to the same exact source identities used by the self-hosted
-# workflow.  A different checker/fixture or a modified upstream worktree is a
-# different experiment and must not inherit B06 completion evidence.
+test "$(uname -s)" = Linux
+case "$(uname -m)" in
+    x86_64|amd64) ;;
+    *) printf 'FAIL: B06 acceptance requires x86-64, got %s\n' "$(uname -m)" >&2; exit 1 ;;
+esac
+
+python3 - <<'PY'
+import sys
+if sys.version_info < (3, 9):
+    raise SystemExit(f"FAIL: Python >= 3.9 required, got {sys.version.split()[0]}")
+print(f"python={sys.version.split()[0]}")
+PY
+
+git_version="$(git version | awk '{print $3}')"
+python3 - "$git_version" <<'PY'
+import re
+import sys
+m = re.match(r"^(\d+)\.(\d+)", sys.argv[1])
+if not m:
+    raise SystemExit(f"FAIL: cannot parse Git version: {sys.argv[1]}")
+if tuple(map(int, m.groups())) < (2, 18):
+    raise SystemExit(f"FAIL: Git >= 2.18 required, got {sys.argv[1]}")
+print(f"git={sys.argv[1]}")
+PY
+
+# Bind the run to committed course files, not merely to whatever bytes happen
+# to be present in the worktree. A dirty course tree is a different experiment
+# and must not inherit B06 completion evidence.
+test -z "$(git -C "$repo_root" status --porcelain)"
+checker_head="$(git -C "$repo_root" rev-parse "HEAD:$checker_rel")"
+fixture_head="$(git -C "$repo_root" rev-parse "HEAD:$fixture_rel")"
+checker_worktree="$(git -C "$repo_root" hash-object "$checker")"
+fixture_worktree="$(git -C "$repo_root" hash-object "$fixture")"
+
+test "$checker_head" = "$expected_checker"
+test "$fixture_head" = "$expected_fixture"
+test "$checker_worktree" = "$checker_head"
+test "$fixture_worktree" = "$fixture_head"
+printf 'course HEAD=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
+printf 'checker blob=%s\n' "$checker_head"
+printf 'fixture blob=%s\n' "$fixture_head"
+
+# Bind L1 evidence to the exact upstream v5.10 commit and a clean source tree.
 test "$(git -C "$upstream" rev-parse HEAD)" = "$expected_upstream"
 test -z "$(git -C "$upstream" status --porcelain)"
-test "$(git -C "$repo_root" hash-object "$checker")" = "$expected_checker"
-test "$(git -C "$repo_root" hash-object "$fixture")" = "$expected_fixture"
+printf 'upstream HEAD=%s\n' "$(git -C "$upstream" rev-parse HEAD)"
 
 fixture_log="$(mktemp)"
 upstream_log="$(mktemp)"
@@ -45,5 +93,8 @@ for group in 1 2 3 4 5 6 7; do
     grep -Eq "^PASS ${group}: " "$upstream_log"
 done
 grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$upstream_log"
+
+# The checker and fixture should not mutate the course checkout.
+test -z "$(git -C "$repo_root" status --porcelain)"
 
 printf 'PASS: B06 exact fixture 22/22 and upstream Linux v5.10 source contracts 7/7\n'
