@@ -23,6 +23,12 @@ jobs:
     # runner minutes.
     runs-on: [self-hosted, linux, x64, kernel-course]
     timeout-minutes: 30
+    # Evidence gates below parse command output (`git --version`, unittest
+    # summary lines and checker PASS lines). Force the POSIX C locale so a
+    # persistent runner's host/user locale cannot change those machine-readable
+    # strings between otherwise identical validation runs.
+    env:
+      LC_ALL: C
     steps:
       - name: Verify runner prerequisites
         shell: bash
