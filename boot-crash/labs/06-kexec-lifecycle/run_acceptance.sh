@@ -19,7 +19,10 @@ for command in git dirname; do
     }
 done
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(git -C "$script_dir" rev-parse --show-toplevel)"
+repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null)" || {
+    printf 'FAIL: acceptance script is not inside a Git course checkout: %s\n' "$script_dir" >&2
+    exit 1
+}
 lab="$repo_root/boot-crash/labs/06-kexec-lifecycle"
 upstream="${1:?usage: run_acceptance.sh /path/to/linux-v5.10}"
 
@@ -43,10 +46,15 @@ for command in git dirname python3 uname grep tee mktemp rm; do
     }
 done
 
-test "$(uname -s)" = Linux
-case "$(uname -m)" in
+os="$(uname -s)"
+if test "$os" != Linux; then
+    printf 'FAIL: B06 acceptance requires Linux, got %s\n' "$os" >&2
+    exit 1
+fi
+arch="$(uname -m)"
+case "$arch" in
     x86_64|amd64) ;;
-    *) printf 'FAIL: B06 acceptance requires x86-64, got %s\n' "$(uname -m)" >&2; exit 1 ;;
+    *) printf 'FAIL: B06 acceptance requires x86-64, got %s\n' "$arch" >&2; exit 1 ;;
 esac
 
 python3 - <<'PY'
@@ -87,9 +95,20 @@ printf 'checker blob=%s\n' "$checker_head"
 printf 'fixture blob=%s\n' "$fixture_head"
 
 # Bind L1 evidence to the exact upstream v5.10 commit and a clean source tree.
-test "$(git -C "$upstream" rev-parse HEAD)" = "$expected_upstream"
-test -z "$(git -C "$upstream" status --porcelain)"
-printf 'upstream HEAD=%s\n' "$(git -C "$upstream" rev-parse HEAD)"
+if ! git -C "$upstream" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf 'FAIL: upstream path is not a Git worktree: %s\n' "$upstream" >&2
+    exit 1
+fi
+upstream_head="$(git -C "$upstream" rev-parse HEAD)"
+if test "$upstream_head" != "$expected_upstream"; then
+    printf 'FAIL: upstream HEAD must be %s, got %s\n' "$expected_upstream" "$upstream_head" >&2
+    exit 1
+fi
+if test -n "$(git -C "$upstream" status --porcelain)"; then
+    printf 'FAIL: upstream Linux v5.10 worktree is dirty: %s\n' "$upstream" >&2
+    exit 1
+fi
+printf 'upstream HEAD=%s\n' "$upstream_head"
 
 fixture_log="$(mktemp)"
 upstream_log="$(mktemp)"
