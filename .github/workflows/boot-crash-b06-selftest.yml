@@ -6,99 +6,55 @@ on:
 permissions:
   contents: read
 
-# The upstream checkout uses a fixed workspace-relative directory and the
-# evidence is intended to describe one exact validation run. Serialize manual
-# B06 validations instead of allowing overlapping runs to race on a persistent
-# self-hosted runner/workspace. Do not cancel an in-flight evidence-producing
-# run when another manual dispatch is queued.
 concurrency:
   group: boot-crash-b06-selftest
   cancel-in-progress: false
 
 jobs:
   selftest:
-    # This repository currently has no budget reserved for GitHub-hosted
-    # runners. Keep this workflow opt-in and require a project-controlled
-    # self-hosted Linux/x86-64 runner instead of silently consuming hosted
-    # runner minutes.
     runs-on: [self-hosted, linux, x64, kernel-course]
     timeout-minutes: 30
-    # Evidence gates below parse command output (`git --version`, unittest
-    # summary lines and checker PASS lines). Force the POSIX C locale so a
-    # persistent runner's host/user locale cannot change those machine-readable
-    # strings between otherwise identical validation runs.
     env:
       LC_ALL: C
+      # unittest imports the checker from the course worktree. Prevent Python
+      # from creating untracked __pycache__ files that would make the final
+      # clean-tree provenance gate fail because of the verifier itself.
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Verify runner prerequisites
         shell: bash
         run: |
           set -euo pipefail
-          # Check every external command used by the evidence-producing shell
-          # steps up front. A minimal self-hosted image must fail as an
-          # infrastructure prerequisite failure, not halfway through a fixture
-          # or upstream-source validation where it could be mistaken for a
-          # course/checker failure.
           for command in git python3 uname grep tee mktemp rm; do
             command -v "$command"
           done
-
           os="$(uname -s)"
           arch="$(uname -m)"
           printf 'runner platform=%s/%s\n' "$os" "$arch"
           test "$os" = Linux
           case "$arch" in
             x86_64|amd64) ;;
-            *)
-              printf 'B06 workflow requires an x86-64 runner; got %s\n' "$arch" >&2
-              exit 1
-              ;;
+            *) printf 'B06 workflow requires an x86-64 runner; got %s\n' "$arch" >&2; exit 1 ;;
           esac
-
           git --version
           python3 --version
-          # actions/checkout v4 falls back to the GitHub REST API when Git
-          # 2.18+ is unavailable. B06 provenance gates require a real .git
-          # repository (rev-parse/status/hash-object), so fail early instead
-          # of allowing that fallback to produce a later, misleading error.
-          # verify_source_contract.py also uses PEP 585 built-in generic
-          # syntax such as list[tuple[str, str]], which requires Python >= 3.9.
           python3 - <<'PY'
-          import re
-          import subprocess
-          import sys
-
-          git_text = subprocess.check_output(
-              ["git", "--version"], text=True
-          ).strip()
+          import re, subprocess, sys
+          git_text = subprocess.check_output(["git", "--version"], text=True).strip()
           match = re.search(r"git version (\d+)\.(\d+)", git_text)
           if not match:
               raise SystemExit(f"cannot parse Git version: {git_text!r}")
-          git_version = tuple(map(int, match.groups()))
-          if git_version < (2, 18):
-              raise SystemExit(
-                  f"B06 workflow requires Git >= 2.18; runner provides {git_text}"
-              )
-
-          required_python = (3, 9)
+          if tuple(map(int, match.groups())) < (2, 18):
+              raise SystemExit(f"B06 workflow requires Git >= 2.18; runner provides {git_text}")
           print(f"python executable={sys.executable}")
           print(f"python version={sys.version.split()[0]}")
-          if sys.version_info < required_python:
-              raise SystemExit(
-                  f"B06 checker requires Python >= {required_python[0]}.{required_python[1]}; "
-                  f"runner provides {sys.version.split()[0]}"
-              )
+          if sys.version_info < (3, 9):
+              raise SystemExit(f"B06 checker requires Python >= 3.9; runner provides {sys.version.split()[0]}")
           PY
 
-      # Pin third-party actions by full commit SHA so a future movement of a
-      # mutable major-version tag cannot change the executable used to produce
-      # B06 completion evidence. This SHA is actions/checkout v4.4.0.
       - name: Checkout course repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # workflow_dispatch selects one exact course revision. Pass it to
-          # checkout explicitly instead of relying on checkout's event-default
-          # ref resolution; the next step independently verifies HEAD == GITHUB_SHA.
           ref: ${{ github.sha }}
           clean: true
           fetch-depth: 1
@@ -110,33 +66,24 @@ jobs:
         run: |
           set -euo pipefail
           test -z "$(git status --porcelain)"
-
-          # workflow_dispatch establishes GITHUB_SHA as the commit selected for
-          # this run. Bind the checked-out repository to that event identity so
-          # the evidence cannot silently describe a different default-branch
-          # revision if checkout/ref behavior changes later.
           course_head="$(git rev-parse HEAD)"
           printf 'event GITHUB_SHA=%s\n' "$GITHUB_SHA"
           git show -s --format='course HEAD=%H %s' HEAD
           test "$course_head" = "$GITHUB_SHA"
-
           checker=boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
           fixture=boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
           expected_checker_blob=5c89b67628cf55560089656d5b65e80ff74c556f
           expected_fixture_blob=f18918cfbe0b01ffba59be3ac083a9971295a2f8
-
           checker_committed="$(git rev-parse "HEAD:${checker}")"
           checker_worktree="$(git hash-object "$checker")"
           fixture_committed="$(git rev-parse "HEAD:${fixture}")"
           fixture_worktree="$(git hash-object "$fixture")"
-
           printf 'checker expected blob=%s\n' "$expected_checker_blob"
           printf 'checker committed blob=%s\n' "$checker_committed"
           printf 'checker worktree blob=%s\n' "$checker_worktree"
           printf 'fixture expected blob=%s\n' "$expected_fixture_blob"
           printf 'fixture committed blob=%s\n' "$fixture_committed"
           printf 'fixture worktree blob=%s\n' "$fixture_worktree"
-
           test "$checker_committed" = "$expected_checker_blob"
           test "$fixture_committed" = "$expected_fixture_blob"
           test "$checker_worktree" = "$checker_committed"
@@ -189,7 +136,6 @@ jobs:
           output="$(mktemp)"
           trap 'rm -f "$output"' EXIT
           python3 boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py "$B06_UPSTREAM_DIR" 2>&1 | tee "$output"
-
           test "$(grep -Ec '^PASS [1-7]: ' "$output")" -eq 7
           for group in 1 2 3 4 5 6 7; do
             grep -Eq "^PASS ${group}: " "$output"
