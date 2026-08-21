@@ -173,7 +173,9 @@ Could not resolve host: github.com
 runner labels：[self-hosted, linux, x64, kernel-course]
 GitHub-hosted runner：不使用
 timeout：30 分钟
-runner prerequisite：Git >= 2.18，Python >= 3.9
+runner platform：实际 uname 必须为 Linux + x86-64（x86_64/amd64）
+runner commands：git、python3、uname、grep、tee、mktemp、rm 必须存在
+runner prerequisite：Git >= 2.18，Python >= 3.9；前置条件失败必须发生在 checkout/test 证据产生之前
 third-party action：actions/checkout 固定到完整 commit
                     11d5960a326750d5838078e36cf38b85af677262
 course revision：checkout 显式 ref=${{ github.sha }}，随后要求 HEAD == GITHUB_SHA
