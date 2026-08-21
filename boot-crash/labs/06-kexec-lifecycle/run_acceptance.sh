@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export LC_ALL=C
+# The acceptance commands execute Python directly from the course worktree.
+# Disable bytecode writes so unittest/checker imports cannot create untracked
+# __pycache__ files and make the final clean-tree provenance gate fail because
+# of the verifier itself rather than because of a course/source change.
+export PYTHONDONTWRITEBYTECODE=1
 
 # Run the two B06 hard acceptance gates without GitHub Actions. The caller
 # supplies an already-materialized upstream Linux v5.10 tree; this keeps the
@@ -166,7 +171,9 @@ if ! grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$upstream_log";
     exit 1
 fi
 
-# The checker and fixture should not mutate the course checkout.
+# The checker and fixture should not mutate the course checkout. Python
+# bytecode writes are disabled above, so a dirty tree here represents a real
+# verifier/test side effect rather than normal __pycache__ generation.
 if test -n "$(git -C "$repo_root" status --porcelain)"; then
     printf 'FAIL: course worktree became dirty during B06 acceptance: %s\n' "$repo_root" >&2
     exit 1
