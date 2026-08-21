@@ -28,9 +28,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          command -v git
-          command -v python3
-          command -v uname
+          # Check every external command used by the evidence-producing shell
+          # steps up front. A minimal self-hosted image must fail as an
+          # infrastructure prerequisite failure, not halfway through a fixture
+          # or upstream-source validation where it could be mistaken for a
+          # course/checker failure.
+          for command in git python3 uname grep tee mktemp rm; do
+            command -v "$command"
+          done
 
           os="$(uname -s)"
           arch="$(uname -m)"
