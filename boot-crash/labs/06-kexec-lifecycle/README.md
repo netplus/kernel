@@ -11,6 +11,7 @@
 - [`expected-analysis.md`](expected-analysis.md)
 - [`verify_source_contract.py`](verify_source_contract.py)
 - [`test_verify_source_contract.py`](test_verify_source_contract.py)
+- [`run_acceptance.sh`](run_acceptance.sh)
 - [`selftest-results.md`](selftest-results.md)
 
 > L3 中真正执行 Kexec/crash 的命令只能在可丢弃虚拟机或专用测试机中运行。
@@ -153,6 +154,35 @@ CONFIG_KEXEC_FILE
 CONFIG_CRASH_DUMP
 ```
 
+### 一次执行两个 B06 硬验收门槛
+
+如果课程仓库和 upstream v5.10 已经在本机 materialize，可以使用本实验提供的本地验收入口，而不需要 GitHub-hosted runner：
+
+```bash
+/path/to/kernel/boot-crash/labs/06-kexec-lifecycle/run_acceptance.sh \
+    /path/to/linux-v5.10
+```
+
+脚本从自身路径定位课程仓库，因此调用者不必先 `cd` 到仓库根目录。它不会下载源码；upstream tree 必须由执行者事先准备。这样网络获取与 evidence-producing step 保持分离，也便于在零新增费用的本地或 self-hosted 环境复核。
+
+脚本在产生 PASS 前会机器检查：
+
+```text
+实际平台：Linux / x86-64
+Git >= 2.18
+Python >= 3.9
+course worktree clean
+checker committed/worktree blob == 5c89b67628cf55560089656d5b65e80ff74c556f
+fixture committed/worktree blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
+upstream HEAD == 2c85ebc57b3e1817b6ce1a6b703928e113a90442
+upstream worktree clean
+fixture: Ran 22 tests + OK
+upstream checker: PASS 1..7 + 7-group summary
+course worktree 在执行后仍保持 clean
+```
+
+任一 gate 失败都不能作为 B06 收章证据。尤其不要通过修改 expected blob、放宽 source contract 或跳过 clean-tree/commit identity 检查来取得 PASS；若真实 upstream v5.10 与 checker 冲突，应回到 v5.10 源码核实并修正课程或 checker。
+
 ---
 
 ## 4. L1-A：加载 API 与 image purpose 是二维关系
@@ -282,6 +312,7 @@ ps -p 1 -o pid,comm,args
 B06 source-path / tutorial / experiment model:          present
 7-group L1 checker:                                     present
 1 positive + 21 negative fixtures (22 cases):           present
+local exact-provenance acceptance entry point:          present
 current exact-pair fixture PASS:                        not established
 historical superseded fixture PASS:                     9/9, exit 0
 manual upstream-v5.10 source revalidation:              done
@@ -293,12 +324,13 @@ isolated-VM L3:                                         not executed
 下一独立验收单元已经从“继续扩 fixture”切换为实际执行：
 
 ```text
-A. 原样执行当前 checker/fixture pair，要求 22 tests / OK / exit 0；
-B. 在 upstream Linux v5.10 commit
-   2c85ebc57b3e1817b6ce1a6b703928e113a90442 的 source tree 上执行同一
-   checker，要求 7 组 contract 全部 PASS；
-C. 记录 checker blob SHA、fixture blob SHA、upstream commit 和输出；
-D. 任一失败都以 upstream v5.10 源码为准修正，不得放宽契约绕过。
+A. 准备干净的 upstream Linux v5.10 exact tree；
+B. 执行 run_acceptance.sh /path/to/linux-v5.10；
+C. 要求当前 checker/fixture pair 得到 22 tests / OK / exit 0；
+D. 要求同一 checker 在 upstream commit
+   2c85ebc57b3e1817b6ce1a6b703928e113a90442 上得到 7/7；
+E. 记录 course commit、checker blob、fixture blob、upstream commit 和输出；
+F. 任一失败都以 upstream v5.10 源码为准修正，不得放宽契约绕过。
 ```
 
-A-C 成立后再进入 B06 completion review。
+A-E 成立后再恢复 B06 收章状态。
