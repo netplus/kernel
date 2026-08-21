@@ -81,7 +81,15 @@ jobs:
         run: |
           set -euo pipefail
           test -z "$(git status --porcelain)"
+
+          # workflow_dispatch establishes GITHUB_SHA as the commit selected for
+          # this run. Bind the checked-out repository to that event identity so
+          # the evidence cannot silently describe a different default-branch
+          # revision if checkout/ref behavior changes later.
+          course_head="$(git rev-parse HEAD)"
+          printf 'event GITHUB_SHA=%s\n' "$GITHUB_SHA"
           git show -s --format='course HEAD=%H %s' HEAD
+          test "$course_head" = "$GITHUB_SHA"
 
           checker=boot-crash/labs/06-kexec-lifecycle/verify_source_contract.py
           fixture=boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
