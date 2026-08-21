@@ -42,7 +42,8 @@ if sys.version_info < (3, 9):
 print(f"python={sys.version.split()[0]}")
 PY
 
-git_version="$(git version | awk '{print $3}')"
+git_version_output="$(git version)"
+git_version="${git_version_output#git version }"
 python3 - "$git_version" <<'PY'
 import re
 import sys
