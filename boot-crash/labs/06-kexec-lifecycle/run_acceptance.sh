@@ -79,17 +79,34 @@ PY
 
 # Bind the run to committed course files, not merely to whatever bytes happen
 # to be present in the worktree. A dirty course tree is a different experiment
-# and must not inherit B06 completion evidence.
-test -z "$(git -C "$repo_root" status --porcelain)"
+# and must not inherit B06 completion evidence. Report provenance mismatches
+# explicitly so they cannot be confused with checker or upstream-source
+# failures.
+if test -n "$(git -C "$repo_root" status --porcelain)"; then
+    printf 'FAIL: course worktree is dirty: %s\n' "$repo_root" >&2
+    exit 1
+fi
 checker_head="$(git -C "$repo_root" rev-parse "HEAD:$checker_rel")"
 fixture_head="$(git -C "$repo_root" rev-parse "HEAD:$fixture_rel")"
 checker_worktree="$(git -C "$repo_root" hash-object "$checker")"
 fixture_worktree="$(git -C "$repo_root" hash-object "$fixture")"
 
-test "$checker_head" = "$expected_checker"
-test "$fixture_head" = "$expected_fixture"
-test "$checker_worktree" = "$checker_head"
-test "$fixture_worktree" = "$fixture_head"
+if test "$checker_head" != "$expected_checker"; then
+    printf 'FAIL: checker committed blob must be %s, got %s\n' "$expected_checker" "$checker_head" >&2
+    exit 1
+fi
+if test "$fixture_head" != "$expected_fixture"; then
+    printf 'FAIL: fixture committed blob must be %s, got %s\n' "$expected_fixture" "$fixture_head" >&2
+    exit 1
+fi
+if test "$checker_worktree" != "$checker_head"; then
+    printf 'FAIL: checker worktree blob %s differs from committed blob %s\n' "$checker_worktree" "$checker_head" >&2
+    exit 1
+fi
+if test "$fixture_worktree" != "$fixture_head"; then
+    printf 'FAIL: fixture worktree blob %s differs from committed blob %s\n' "$fixture_worktree" "$fixture_head" >&2
+    exit 1
+fi
 printf 'course HEAD=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
 printf 'checker blob=%s\n' "$checker_head"
 printf 'fixture blob=%s\n' "$fixture_head"
@@ -129,6 +146,9 @@ done
 grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$upstream_log"
 
 # The checker and fixture should not mutate the course checkout.
-test -z "$(git -C "$repo_root" status --porcelain)"
+if test -n "$(git -C "$repo_root" status --porcelain)"; then
+    printf 'FAIL: course worktree became dirty during B06 acceptance: %s\n' "$repo_root" >&2
+    exit 1
+fi
 
 printf 'PASS: B06 exact fixture 22/22 and upstream Linux v5.10 source contracts 7/7\n'
