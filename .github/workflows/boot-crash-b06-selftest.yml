@@ -30,6 +30,20 @@ jobs:
           set -euo pipefail
           command -v git
           command -v python3
+          command -v uname
+
+          os="$(uname -s)"
+          arch="$(uname -m)"
+          printf 'runner platform=%s/%s\n' "$os" "$arch"
+          test "$os" = Linux
+          case "$arch" in
+            x86_64|amd64) ;;
+            *)
+              printf 'B06 workflow requires an x86-64 runner; got %s\n' "$arch" >&2
+              exit 1
+              ;;
+          esac
+
           git --version
           python3 --version
           # actions/checkout v4 falls back to the GitHub REST API when Git
