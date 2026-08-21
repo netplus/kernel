@@ -141,6 +141,10 @@ jobs:
             grep -Eq "^PASS ${group}: " "$output"
           done
           grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$output"
+          # The checker is a read-only verifier. Keep the source-input identity
+          # true after execution as well as before it, so a verifier side effect
+          # cannot silently become part of a successful 7/7 evidence record.
+          test -z "$(git -C "$B06_UPSTREAM_DIR" status --porcelain)"
 
       - name: Clean isolated upstream checkout
         if: ${{ always() }}
