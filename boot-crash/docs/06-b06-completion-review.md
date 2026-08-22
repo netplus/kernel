@@ -41,7 +41,7 @@ git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 因此，上一 revision 中“当前 workflow 不能作为已经可执行的 B06 验收入口”的判断已经失效，不能继续作为 blocker。当前 workflow 的设计路径已经恢复为可执行状态，并继续机器验证：
 
 - runner 实际为 Linux/x86-64，Git >= 2.18、Python >= 3.9，且所需外部命令存在；
-- `$RUNNER_TEMP` 必须非空、为绝对路径且已经存在为目录；该检查发生在任何 checkout/materialization 之前。因为后续会在此根目录下构造确定性的 upstream scratch path 并执行清理，所以不满足这一条件属于 runner prerequisite failure，而不是 B06 fixture/source-contract failure；
+- `$RUNNER_TEMP` 必须非空、为绝对路径、已经存在为目录，并且不能是根目录 `/`；该检查发生在任何 checkout/materialization 之前。因为后续会在此根目录下构造确定性的 upstream scratch path 并执行 `rm -rf`，所以不满足这一条件属于 runner prerequisite failure，而不是 B06 fixture/source-contract failure；显式拒绝 `/` 也保证 B06 的 destructive cleanup 不会退化到文件系统根目录命名空间；
 - course `HEAD == GITHUB_SHA`，course worktree clean；
 - checker/fixture 的 committed blob 与 worktree blob 均严格匹配当前 exact baseline；
 - fixture 必须报告 `Ran 22 tests` 与 `OK`；
