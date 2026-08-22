@@ -47,8 +47,10 @@ git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 - fixture 必须报告 `Ran 22 tests` 与 `OK`；
 - upstream `HEAD` 必须精确等于 Linux v5.10 commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442`，执行前后 worktree 均 clean；
 - checker 必须恰好得到 `PASS 1..7` 和最终 7-group summary；
-- `$RUNNER_TEMP` 中的 upstream tree 在 `always()` cleanup 中删除；cleanup 不依赖 prepare step 已成功发布 `B06_UPSTREAM_DIR`：若环境变量尚不存在，会由 `$RUNNER_TEMP`、`GITHUB_RUN_ID` 和 `GITHUB_RUN_ATTEMPT` 重建本次 run 的确定路径后删除，因此 prepare 阶段提前失败也不能把本次临时 upstream tree 留在持久 runner 上；prepare 与 cleanup 在执行 `rm -rf` 前都要求目标严格位于 `$RUNNER_TEMP/kernel-course-b06-linux-v5.10-*` 命名空间，任何其他路径都会被拒绝，避免损坏的环境变量扩大 destructive cleanup 边界；cleanup 同时以 `-e` 与 `-L` 判断目标，删除后同时断言目标既不存在也不是 symbolic link，因此 dangling symlink 也不能绕过清理并跨 run 残留；
+- `$RUNNER_TEMP` 中的 upstream tree 在 `always()` cleanup 中删除；cleanup 不依赖 prepare step 已成功发布 `B06_UPSTREAM_DIR`：若环境变量尚不存在，会由 `$RUNNER_TEMP`、`GITHUB_RUN_ID` 和 `GITHUB_RUN_ATTEMPT` 重建本次 run 唯一允许的确定路径；若环境变量已经存在，也必须与这个独立重建的路径逐字相等，否则拒绝执行 `rm -rf`。因此 prepare 阶段提前失败仍可清理本次 scratch object，而损坏、注入额外后缀或包含路径遍历成分的 `B06_UPSTREAM_DIR` 都不能扩大 destructive cleanup 边界；cleanup 同时以 `-e` 与 `-L` 判断目标，删除后同时断言目标既不存在也不是 symbolic link，因此 dangling symlink 也不能绕过清理并跨 run 残留；
 - course checkout 在执行后再次验证 HEAD 与 clean 状态；该 post-execution gate 只有本次 `Checkout course repository` step 成功时才运行。若 checkout 本身失败，失败应保留为 checkout/infrastructure failure，不能在 persistent runner 上继续读取可能属于旧 run 的工作树并生成伪 provenance failure。
+
+这里的删除边界必须理解为 **exact-path identity gate**，而不是“路径位于某个 glob/prefix namespace 即可”。合法目标由本次 run 的 `RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT` 唯一决定；prepare 与 cleanup 都只能删除这一对象。
 
 这些 machine gates 只定义“什么样的 run 才是有效证据”，并不等于已经实际运行成功。当前尚未取得匹配 `kernel-course` self-hosted runner 上的 22/22 + 7/7 执行记录，因此 B06 状态不变。
 
