@@ -141,9 +141,11 @@ jobs:
             grep -Eq "^PASS ${group}: " "$output"
           done
           grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$output"
-          # The checker is a read-only verifier. Keep the source-input identity
-          # true after execution as well as before it, so a verifier side effect
-          # cannot silently become part of a successful 7/7 evidence record.
+          # The checker is a read-only verifier. Preserve both the ref and the
+          # file tree that were authenticated before the evidence-producing
+          # step; a clean tree alone would not detect a switch to another clean
+          # commit.
+          test "$(git -C "$B06_UPSTREAM_DIR" rev-parse HEAD)" = "2c85ebc57b3e1817b6ce1a6b703928e113a90442"
           test -z "$(git -C "$B06_UPSTREAM_DIR" status --porcelain)"
 
       - name: Clean isolated upstream checkout
@@ -156,9 +158,10 @@ jobs:
           fi
           [[ -z "${B06_UPSTREAM_DIR:-}" || ! -e "$B06_UPSTREAM_DIR" ]]
 
-      - name: Verify course checkout remained clean
+      - name: Verify course checkout remained exact and clean
         if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git status --porcelain)"
