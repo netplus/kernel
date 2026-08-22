@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export LC_ALL=C
-# The acceptance commands execute Python directly from the course worktree.
-# Disable bytecode writes so unittest/checker imports cannot create untracked
-# __pycache__ files and make the final clean-tree provenance gate fail because
-# of the verifier itself rather than because of a course/source change.
 export PYTHONDONTWRITEBYTECODE=1
 
 # Run the two B06 hard acceptance gates without GitHub Actions. The caller
@@ -12,11 +8,6 @@ export PYTHONDONTWRITEBYTECODE=1
 # script usable in a zero-new-cost local/self-hosted environment and avoids
 # hiding network acquisition inside the evidence-producing step.
 
-# Resolve the course checkout from this script rather than from the caller's
-# current directory. A local acceptance entry point must behave identically
-# when invoked from the repository root or through an absolute script path.
-# dirname is needed before repository discovery, so validate both early
-# commands before using either one.
 for command in git dirname; do
     command -v "$command" >/dev/null || {
         printf 'FAIL: required command not found: %s\n' "$command" >&2
@@ -44,11 +35,6 @@ fixture_rel=boot-crash/labs/06-kexec-lifecycle/test_verify_source_contract.py
 checker="$repo_root/$checker_rel"
 fixture="$repo_root/$fixture_rel"
 
-# Fail before producing course evidence when the local execution environment
-# does not satisfy the same basic platform/tool contract as the self-hosted
-# workflow. git and dirname were checked before repository discovery above;
-# keep them in this list so the complete prerequisite contract remains visible
-# in one place.
 for command in git dirname python3 uname grep tee mktemp rm; do
     command -v "$command" >/dev/null || {
         printf 'FAIL: required command not found: %s\n' "$command" >&2
@@ -87,11 +73,6 @@ if tuple(map(int, m.groups())) < (2, 18):
 print(f"git={sys.argv[1]}")
 PY
 
-# Bind the run to committed course files, not merely to whatever bytes happen
-# to be present in the worktree. A dirty course tree is a different experiment
-# and must not inherit B06 completion evidence. Report provenance mismatches
-# explicitly so they cannot be confused with checker or upstream-source
-# failures.
 if test -n "$(git -C "$repo_root" status --porcelain)"; then
     printf 'FAIL: course worktree is dirty: %s\n' "$repo_root" >&2
     exit 1
@@ -121,7 +102,6 @@ printf 'course HEAD=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
 printf 'checker blob=%s\n' "$checker_head"
 printf 'fixture blob=%s\n' "$fixture_head"
 
-# Bind L1 evidence to the exact upstream v5.10 commit and a clean source tree.
 if ! git -C "$upstream" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     printf 'FAIL: upstream path is not a Git worktree: %s\n' "$upstream" >&2
     exit 1
@@ -171,9 +151,14 @@ if ! grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$upstream_log";
     exit 1
 fi
 
-# The checker and fixture should not mutate the course checkout. Python
-# bytecode writes are disabled above, so a dirty tree here represents a real
-# verifier/test side effect rather than normal __pycache__ generation.
+# Treat the upstream source tree as immutable verifier input. A successful
+# 7/7 result is not acceptable evidence if the checker changed the tree that
+# it inspected. This mirrors the self-hosted workflow's post-checker gate.
+if test -n "$(git -C "$upstream" status --porcelain)"; then
+    printf 'FAIL: upstream Linux v5.10 worktree became dirty during B06 acceptance: %s\n' "$upstream" >&2
+    exit 1
+fi
+
 if test -n "$(git -C "$repo_root" status --porcelain)"; then
     printf 'FAIL: course worktree became dirty during B06 acceptance: %s\n' "$repo_root" >&2
     exit 1
