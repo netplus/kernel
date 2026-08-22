@@ -59,6 +59,10 @@ jobs:
         run: |
           set -euo pipefail
           upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          case "$upstream_dir" in
+            "$RUNNER_TEMP"/kernel-course-b06-linux-v5.10-*) ;;
+            *) printf 'refusing unsafe B06 upstream path: %q\n' "$upstream_dir" >&2; exit 1 ;;
+          esac
           rm -rf -- "$upstream_dir"
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
@@ -154,6 +158,13 @@ jobs:
           # it could publish B06_UPSTREAM_DIR through GITHUB_ENV. This keeps a
           # persistent self-hosted runner clean even on that early failure path.
           upstream_dir="${B06_UPSTREAM_DIR:-${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
+          # Never let a corrupted or unexpectedly supplied environment value turn
+          # this persistent-runner cleanup into an rm -rf outside B06's scratch
+          # namespace under RUNNER_TEMP.
+          case "$upstream_dir" in
+            "$RUNNER_TEMP"/kernel-course-b06-linux-v5.10-*) ;;
+            *) printf 'refusing unsafe B06 cleanup path: %q\n' "$upstream_dir" >&2; exit 1 ;;
+          esac
           # -e is false for a dangling symlink. Include -L so a stale symlink at
           # the deterministic scratch path cannot survive cleanup between runs.
           if [[ -e "$upstream_dir" || -L "$upstream_dir" ]]; then
