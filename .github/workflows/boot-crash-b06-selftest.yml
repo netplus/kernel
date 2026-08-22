@@ -63,6 +63,7 @@ jobs:
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
       - name: Checkout course repository
+        id: course_checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
@@ -161,7 +162,7 @@ jobs:
           [[ ! -e "$upstream_dir" && ! -L "$upstream_dir" ]]
 
       - name: Verify course checkout remained exact and clean
-        if: ${{ always() }}
+        if: ${{ always() && steps.course_checkout.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
