@@ -16,9 +16,6 @@ jobs:
     timeout-minutes: 30
     env:
       LC_ALL: C
-      # unittest imports the checker from the course worktree. Prevent Python
-      # from creating untracked __pycache__ files that would make the final
-      # clean-tree provenance gate fail because of the verifier itself.
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Verify runner prerequisites
@@ -52,20 +49,16 @@ jobs:
               raise SystemExit(f"B06 checker requires Python >= 3.9; runner provides {sys.version.split()[0]}")
           PY
 
-      # This path is an untracked nested checkout inside GITHUB_WORKSPACE.
-      # actions/checkout clean=true cleans only the course repository's tracked
-      # state and does not make stale nested state a reliable precondition.
-      # Remove the known B06 scratch tree before checking out the course repo so
-      # a previously interrupted self-hosted run cannot contaminate this run.
-      - name: Clean stale B06 upstream workspace before course checkout
+      - name: Prepare isolated upstream workspace
         shell: bash
         run: |
           set -euo pipefail
-          stale_upstream="${GITHUB_WORKSPACE}/.b06-upstream-linux-v5.10"
-          if [[ -e "$stale_upstream" ]]; then
-            rm -rf -- "$stale_upstream"
-          fi
-          [[ ! -e "$stale_upstream" ]]
+          # Keep the large, disposable Linux checkout outside GITHUB_WORKSPACE.
+          # This prevents it from becoming an untracked nested repository in
+          # the course checkout and gives it an independent lifecycle.
+          upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf -- "$upstream_dir"
+          printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
       - name: Checkout course repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -116,21 +109,12 @@ jobs:
           grep -Eq '^Ran 22 tests in ' "$output"
           grep -Eq '^OK$' "$output"
 
-      - name: Prepare isolated upstream workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          upstream_rel=.b06-upstream-linux-v5.10
-          upstream_dir="${GITHUB_WORKSPACE}/${upstream_rel}"
-          rm -rf -- "$upstream_dir"
-          printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
-
       - name: Checkout upstream Linux v5.10
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: torvalds/linux
           ref: 2c85ebc57b3e1817b6ce1a6b703928e113a90442
-          path: .b06-upstream-linux-v5.10
+          path: ${{ env.B06_UPSTREAM_DIR }}
           fetch-depth: 1
           clean: true
           persist-credentials: false
@@ -156,10 +140,6 @@ jobs:
             grep -Eq "^PASS ${group}: " "$output"
           done
           grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$output"
-          # The checker is a read-only verifier. Preserve both the ref and the
-          # file tree that were authenticated before the evidence-producing
-          # step; a clean tree alone would not detect a switch to another clean
-          # commit.
           test "$(git -C "$B06_UPSTREAM_DIR" rev-parse HEAD)" = "2c85ebc57b3e1817b6ce1a6b703928e113a90442"
           test -z "$(git -C "$B06_UPSTREAM_DIR" status --porcelain)"
 
@@ -168,15 +148,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Do not depend on GITHUB_ENV having been written by the prepare step:
-          # an early failure there must not leave a stale upstream checkout on
-          # a persistent self-hosted runner. The checkout path is intentionally
-          # fixed and workspace-relative, so cleanup can reconstruct it here.
-          upstream_dir="${B06_UPSTREAM_DIR:-${GITHUB_WORKSPACE}/.b06-upstream-linux-v5.10}"
-          if [[ -e "$upstream_dir" ]]; then
-            rm -rf -- "$upstream_dir"
+          if [[ -n "${B06_UPSTREAM_DIR:-}" && -e "$B06_UPSTREAM_DIR" ]]; then
+            rm -rf -- "$B06_UPSTREAM_DIR"
           fi
-          [[ ! -e "$upstream_dir" ]]
+          if [[ -n "${B06_UPSTREAM_DIR:-}" ]]; then
+            [[ ! -e "$B06_UPSTREAM_DIR" ]]
+          fi
 
       - name: Verify course checkout remained exact and clean
         if: ${{ always() }}
