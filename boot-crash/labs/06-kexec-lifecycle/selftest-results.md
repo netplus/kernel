@@ -189,6 +189,7 @@ runner prerequisites:
   Git >= 2.18
   Python >= 3.9
   git, python3, uname, grep, tee, mktemp and rm must all be available
+  RUNNER_TEMP must be non-empty, absolute and an existing directory
   prerequisite failures occur before checkout/test evidence is produced
 
 run identity and serialization:
@@ -203,6 +204,8 @@ course provenance:
   checker committed blob == 5c89b67628cf55560089656d5b65e80ff74c556f
   fixture committed blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
   worktree blobs == committed blobs
+  post-execution HEAD/clean checks run only if this run's course checkout
+  succeeded, so a checkout failure cannot inspect a stale persistent worktree
 
 fixture evidence:
   unittest command exits successfully
@@ -210,10 +213,11 @@ fixture evidence:
   output contains a standalone "OK"
 
 upstream provenance:
-  torvalds/linux checkout is pinned to
-  2c85ebc57b3e1817b6ce1a6b703928e113a90442
-  git rev-parse HEAD must equal that commit
-  upstream worktree must be clean
+  torvalds/linux is materialized with native Git under RUNNER_TEMP, not as a
+  nested course checkout
+  checkout is pinned to 2c85ebc57b3e1817b6ce1a6b703928e113a90442
+  git rev-parse HEAD must equal that commit before and after checker execution
+  upstream worktree must be clean before and after checker execution
 
 upstream L1 evidence:
   checker exits successfully
@@ -224,8 +228,15 @@ upstream L1 evidence:
 persistent-runner hygiene:
   checkout credentials are not persisted
   checkout does not add safe.directory entries to global Git config
+  upstream scratch path is restricted to
+    $RUNNER_TEMP/kernel-course-b06-linux-v5.10-*
+  prepare and cleanup refuse rm -rf outside that namespace
+  cleanup reconstructs the deterministic run path if B06_UPSTREAM_DIR was not
+  published because preparation failed early
+  cleanup treats both existing paths and symbolic links (-e or -L) as removable
+  inputs, then asserts that neither a path nor a dangling symlink remains
   temporary upstream checkout is removed on success or failure
-  final course worktree must remain clean
+  final course HEAD must still equal GITHUB_SHA and its worktree must be clean
 ```
 
 The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
