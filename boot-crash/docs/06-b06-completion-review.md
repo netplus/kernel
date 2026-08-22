@@ -26,13 +26,9 @@ B. upstream Linux v5.10 commit
 
 人工 upstream-v5.10 L1 事实复核已经完成，但不能冒充自动 checker PASS。
 
-## self-hosted workflow 路径 blocker（2026-08-22）
+## self-hosted workflow 路径状态（2026-08-22）
 
-对 `.github/workflows/boot-crash-b06-selftest.yml` 再次做执行语义复核后，发现当前 revision 存在一个会阻止真实执行的具体问题：workflow 把 upstream checkout 目标设置为 `$RUNNER_TEMP/...` 的绝对路径，然后把该值传给 `actions/checkout` 的 `path` 输入。
-
-`actions/checkout` 的 `path` 是相对于 `$GITHUB_WORKSPACE` 的 repository path；不能把 `$RUNNER_TEMP` 的绝对目录作为一种“workspace 外 checkout”机制。因此当前 workflow 虽然意图把大型 upstream tree 与 course worktree 做物理隔离，但该实现不能作为已经可执行的 B06 验收入口。
-
-本轮尝试直接修正 workflow：保留 course repository 使用固定 revision 的 `actions/checkout`，upstream Linux 则改为在 `$RUNNER_TEMP` 中使用原生 Git：
+此前发现的 `$RUNNER_TEMP` + `actions/checkout path` blocker 已经修正。当前 `.github/workflows/boot-crash-b06-selftest.yml` 不再尝试让 `actions/checkout` 在 `$GITHUB_WORKSPACE` 外建立 upstream checkout：course repository 仍由固定 revision 的 `actions/checkout` 取得；upstream Linux v5.10 则在 `$RUNNER_TEMP` 中使用原生 Git materialize：
 
 ```text
 git init "$B06_UPSTREAM_DIR"
@@ -42,11 +38,19 @@ git -C "$B06_UPSTREAM_DIR" fetch --depth=1 origin \
 git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 ```
 
-这样可以同时满足两个要求：upstream tree 真正位于 `$GITHUB_WORKSPACE` 外；精确 commit、clean-tree、7/7 checker 与 `always()` cleanup 仍可继续验证。
+因此，上一 revision 中“当前 workflow 不能作为已经可执行的 B06 验收入口”的判断已经失效，不能继续作为 blocker。当前 workflow 的设计路径已经恢复为可执行状态，并继续机器验证：
 
-但当前 GitHub 写入接口阻止了对 `.github/workflows/boot-crash-b06-selftest.yml` 的修改，因此本轮无法把上述修正写入 workflow。本文件记录该 blocker，防止后续把当前 workflow 误认为有效的自动验收入口。**在 workflow 修正落地并实际运行前，不得用它建立 B06 PASS。**
+- runner 实际为 Linux/x86-64，Git >= 2.18、Python >= 3.9，且所需外部命令存在；
+- course `HEAD == GITHUB_SHA`，course worktree clean；
+- checker/fixture 的 committed blob 与 worktree blob 均严格匹配当前 exact baseline；
+- fixture 必须报告 `Ran 22 tests` 与 `OK`；
+- upstream `HEAD` 必须精确等于 Linux v5.10 commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442`，执行前后 worktree 均 clean；
+- checker 必须恰好得到 `PASS 1..7` 和最终 7-group summary；
+- `$RUNNER_TEMP` 中的 upstream tree 在 `always()` cleanup 中删除；course checkout 在执行后再次验证 HEAD 与 clean 状态。
 
-这不是 Linux v5.10 源码事实 blocker，也不是 checker failure；它是 self-hosted Actions 执行入口的路径语义 blocker。当前本地 `run_acceptance.sh` 仍是独立的零新增费用验收路径，但需要一个已经 materialize 的 exact upstream v5.10 Git worktree。
+这些 machine gates 只定义“什么样的 run 才是有效证据”，并不等于已经实际运行成功。当前尚未取得匹配 `kernel-course` self-hosted runner 上的 22/22 + 7/7 执行记录，因此 B06 状态不变。
+
+本地 `run_acceptance.sh` 仍是独立的零新增费用验收路径；它要求调用者先提供已经 materialize 的 exact upstream v5.10 Git worktree。
 
 ## 事实边界
 
@@ -59,13 +63,13 @@ B06 的 Linux v5.10 结论仍以 upstream commit `2c85ebc57b3e1817b6ce1a6b703928
 - 两条 loader 都在 persistent install 前执行 `machine_kexec_prepare(image)`；
 - x86-64 `machine_kexec_prepare()` 调用 `init_pgtable()`；`machine_kexec()` 前存在 point-of-no-return 约束。
 
-这些事实没有因 workflow blocker 改变。
+这些事实没有因 workflow 执行路径的修正而改变。
 
 ## 收章判定
 
 **B06 当前仍为【待自动验收】，不能进入 B07。** 下一最小单元优先级如下：
 
-1. 若允许修改 workflow，修正 `$RUNNER_TEMP` + `actions/checkout path` 的不合法组合，并实际运行 self-hosted 验收；
+1. 在匹配 `[self-hosted, linux, x64, kernel-course]` 的零新增费用 runner 上实际运行当前 workflow，取得 22/22 与 upstream 7/7 的完整日志；
 2. 若零新增费用本地环境先具备 exact upstream v5.10 worktree，则直接执行 `boot-crash/labs/06-kexec-lifecycle/run_acceptance.sh`；
 3. 任一路径出现具体 fixture/source-contract failure，立即回到 upstream v5.10 源码判断 checker、fixture 或课程结论哪一项需要修正；
 4. 只有 22/22 与 7/7 都建立可复核执行证据后，才恢复 B06【已完成】并进入 B07。
