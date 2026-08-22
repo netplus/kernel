@@ -53,9 +53,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Keep the large, disposable Linux checkout outside GITHUB_WORKSPACE.
-          # This prevents it from becoming an untracked nested repository in
-          # the course checkout and gives it an independent lifecycle.
           upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           rm -rf -- "$upstream_dir"
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
@@ -109,16 +106,15 @@ jobs:
           grep -Eq '^Ran 22 tests in ' "$output"
           grep -Eq '^OK$' "$output"
 
-      - name: Checkout upstream Linux v5.10
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: torvalds/linux
-          ref: 2c85ebc57b3e1817b6ce1a6b703928e113a90442
-          path: ${{ env.B06_UPSTREAM_DIR }}
-          fetch-depth: 1
-          clean: true
-          persist-credentials: false
-          set-safe-directory: false
+      - name: Materialize exact upstream Linux v5.10 in runner temp
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_upstream=2c85ebc57b3e1817b6ce1a6b703928e113a90442
+          git init "$B06_UPSTREAM_DIR"
+          git -C "$B06_UPSTREAM_DIR" remote add origin https://github.com/torvalds/linux.git
+          git -C "$B06_UPSTREAM_DIR" fetch --depth=1 origin "$expected_upstream"
+          git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 
       - name: Verify upstream checkout identity
         shell: bash
