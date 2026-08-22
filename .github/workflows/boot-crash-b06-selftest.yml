@@ -33,6 +33,11 @@ jobs:
             x86_64|amd64) ;;
             *) printf 'B06 workflow requires an x86-64 runner; got %s\n' "$arch" >&2; exit 1 ;;
           esac
+          if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || ! -d "$RUNNER_TEMP" ]]; then
+            printf 'B06 workflow requires RUNNER_TEMP to name an existing absolute directory; got %q\n' "${RUNNER_TEMP:-}" >&2
+            exit 1
+          fi
+          printf 'runner temp=%s\n' "$RUNNER_TEMP"
           git --version
           python3 --version
           python3 - <<'PY'
