@@ -148,10 +148,12 @@ jobs:
           # it could publish B06_UPSTREAM_DIR through GITHUB_ENV. This keeps a
           # persistent self-hosted runner clean even on that early failure path.
           upstream_dir="${B06_UPSTREAM_DIR:-${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
-          if [[ -e "$upstream_dir" ]]; then
+          # -e is false for a dangling symlink. Include -L so a stale symlink at
+          # the deterministic scratch path cannot survive cleanup between runs.
+          if [[ -e "$upstream_dir" || -L "$upstream_dir" ]]; then
             rm -rf -- "$upstream_dir"
           fi
-          [[ ! -e "$upstream_dir" ]]
+          [[ ! -e "$upstream_dir" && ! -L "$upstream_dir" ]]
 
       - name: Verify course checkout remained exact and clean
         if: ${{ always() }}
