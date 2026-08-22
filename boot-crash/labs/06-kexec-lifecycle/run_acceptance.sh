@@ -77,6 +77,7 @@ if test -n "$(git -C "$repo_root" status --porcelain)"; then
     printf 'FAIL: course worktree is dirty: %s\n' "$repo_root" >&2
     exit 1
 fi
+course_head="$(git -C "$repo_root" rev-parse HEAD)"
 checker_head="$(git -C "$repo_root" rev-parse "HEAD:$checker_rel")"
 fixture_head="$(git -C "$repo_root" rev-parse "HEAD:$fixture_rel")"
 checker_worktree="$(git -C "$repo_root" hash-object "$checker")"
@@ -98,7 +99,7 @@ if test "$fixture_worktree" != "$fixture_head"; then
     printf 'FAIL: fixture worktree blob %s differs from committed blob %s\n' "$fixture_worktree" "$fixture_head" >&2
     exit 1
 fi
-printf 'course HEAD=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
+printf 'course HEAD=%s\n' "$course_head"
 printf 'checker blob=%s\n' "$checker_head"
 printf 'fixture blob=%s\n' "$fixture_head"
 
@@ -151,14 +152,24 @@ if ! grep -Fxq 'PASS: 7 B06 Linux v5.10 source-contract groups' "$upstream_log";
     exit 1
 fi
 
-# Treat the upstream source tree as immutable verifier input. A successful
-# 7/7 result is not acceptable evidence if the checker changed the tree that
-# it inspected. This mirrors the self-hosted workflow's post-checker gate.
+# Treat both Git checkouts as immutable verifier inputs. A clean worktree alone
+# is not enough: HEAD must also remain the exact ref that was verified before
+# the evidence-producing steps.
+upstream_head_after="$(git -C "$upstream" rev-parse HEAD)"
+if test "$upstream_head_after" != "$upstream_head"; then
+    printf 'FAIL: upstream HEAD changed during B06 acceptance: before=%s after=%s\n' "$upstream_head" "$upstream_head_after" >&2
+    exit 1
+fi
 if test -n "$(git -C "$upstream" status --porcelain)"; then
     printf 'FAIL: upstream Linux v5.10 worktree became dirty during B06 acceptance: %s\n' "$upstream" >&2
     exit 1
 fi
 
+course_head_after="$(git -C "$repo_root" rev-parse HEAD)"
+if test "$course_head_after" != "$course_head"; then
+    printf 'FAIL: course HEAD changed during B06 acceptance: before=%s after=%s\n' "$course_head" "$course_head_after" >&2
+    exit 1
+fi
 if test -n "$(git -C "$repo_root" status --porcelain)"; then
     printf 'FAIL: course worktree became dirty during B06 acceptance: %s\n' "$repo_root" >&2
     exit 1
