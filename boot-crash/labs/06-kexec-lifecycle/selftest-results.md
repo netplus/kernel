@@ -189,7 +189,7 @@ runner prerequisites:
   Git >= 2.18
   Python >= 3.9
   git, python3, uname, grep, tee, mktemp and rm must all be available
-  RUNNER_TEMP must be non-empty, absolute and an existing directory
+  RUNNER_TEMP must be non-empty, absolute, an existing directory, and not '/'
   prerequisite failures occur before checkout/test evidence is produced
 
 run identity and serialization:
@@ -228,16 +228,21 @@ upstream L1 evidence:
 persistent-runner hygiene:
   checkout credentials are not persisted
   checkout does not add safe.directory entries to global Git config
-  upstream scratch path is restricted to
-    $RUNNER_TEMP/kernel-course-b06-linux-v5.10-*
-  prepare and cleanup refuse rm -rf outside that namespace
-  cleanup reconstructs the deterministic run path if B06_UPSTREAM_DIR was not
-  published because preparation failed early
+  the only removable upstream scratch object is the exact path reconstructed
+    from RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT:
+    $RUNNER_TEMP/kernel-course-b06-linux-v5.10-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT
+  prepare removes only that exact path before publishing B06_UPSTREAM_DIR
+  cleanup independently reconstructs the same exact path; if a published
+    B06_UPSTREAM_DIR differs byte-for-byte, cleanup refuses rm -rf
+  cleanup can reconstruct the exact path even when preparation failed before
+    B06_UPSTREAM_DIR was published
   cleanup treats both existing paths and symbolic links (-e or -L) as removable
-  inputs, then asserts that neither a path nor a dangling symlink remains
+    inputs, then asserts that neither a path nor a dangling symlink remains
   temporary upstream checkout is removed on success or failure
   final course HEAD must still equal GITHUB_SHA and its worktree must be clean
 ```
+
+The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix.
 
 The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
 
