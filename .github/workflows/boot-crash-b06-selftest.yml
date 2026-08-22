@@ -144,12 +144,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "${B06_UPSTREAM_DIR:-}" && -e "$B06_UPSTREAM_DIR" ]]; then
-            rm -rf -- "$B06_UPSTREAM_DIR"
+          # Reconstruct the deterministic path if the prepare step failed before
+          # it could publish B06_UPSTREAM_DIR through GITHUB_ENV. This keeps a
+          # persistent self-hosted runner clean even on that early failure path.
+          upstream_dir="${B06_UPSTREAM_DIR:-${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
+          if [[ -e "$upstream_dir" ]]; then
+            rm -rf -- "$upstream_dir"
           fi
-          if [[ -n "${B06_UPSTREAM_DIR:-}" ]]; then
-            [[ ! -e "$B06_UPSTREAM_DIR" ]]
-          fi
+          [[ ! -e "$upstream_dir" ]]
 
       - name: Verify course checkout remained exact and clean
         if: ${{ always() }}
