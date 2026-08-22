@@ -153,10 +153,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "${B06_UPSTREAM_DIR:-}" && -e "$B06_UPSTREAM_DIR" ]]; then
-            rm -rf -- "$B06_UPSTREAM_DIR"
+          # Do not depend on GITHUB_ENV having been written by the prepare step:
+          # an early failure there must not leave a stale upstream checkout on
+          # a persistent self-hosted runner. The checkout path is intentionally
+          # fixed and workspace-relative, so cleanup can reconstruct it here.
+          upstream_dir="${B06_UPSTREAM_DIR:-${GITHUB_WORKSPACE}/.b06-upstream-linux-v5.10}"
+          if [[ -e "$upstream_dir" ]]; then
+            rm -rf -- "$upstream_dir"
           fi
-          [[ -z "${B06_UPSTREAM_DIR:-}" || ! -e "$B06_UPSTREAM_DIR" ]]
+          [[ ! -e "$upstream_dir" ]]
 
       - name: Verify course checkout remained exact and clean
         if: ${{ always() }}
