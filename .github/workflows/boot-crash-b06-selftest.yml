@@ -52,6 +52,21 @@ jobs:
               raise SystemExit(f"B06 checker requires Python >= 3.9; runner provides {sys.version.split()[0]}")
           PY
 
+      # This path is an untracked nested checkout inside GITHUB_WORKSPACE.
+      # actions/checkout clean=true cleans only the course repository's tracked
+      # state and does not make stale nested state a reliable precondition.
+      # Remove the known B06 scratch tree before checking out the course repo so
+      # a previously interrupted self-hosted run cannot contaminate this run.
+      - name: Clean stale B06 upstream workspace before course checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          stale_upstream="${GITHUB_WORKSPACE}/.b06-upstream-linux-v5.10"
+          if [[ -e "$stale_upstream" ]]; then
+            rm -rf -- "$stale_upstream"
+          fi
+          [[ ! -e "$stale_upstream" ]]
+
       - name: Checkout course repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
