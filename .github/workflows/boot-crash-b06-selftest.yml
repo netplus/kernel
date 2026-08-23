@@ -37,7 +37,12 @@ jobs:
             printf 'B06 workflow requires RUNNER_TEMP to name a non-root existing absolute directory; got %q\n' "${RUNNER_TEMP:-}" >&2
             exit 1
           fi
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
+            printf 'B06 workflow requires positive numeric GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT; got run=%q attempt=%q\n' "${GITHUB_RUN_ID:-}" "${GITHUB_RUN_ATTEMPT:-}" >&2
+            exit 1
+          fi
           printf 'runner temp=%s\n' "$RUNNER_TEMP"
+          printf 'run identity=%s/%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
           git --version
           python3 --version
           python3 - <<'PY'
@@ -152,22 +157,22 @@ jobs:
         run: |
           set -euo pipefail
           # This step runs even when the prerequisite step failed. Revalidate the
-          # destructive-cleanup root here instead of relying on an earlier gate.
+          # destructive-cleanup root and run identity here instead of relying on
+          # an earlier gate.
           if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" ]]; then
             printf 'refusing B06 cleanup because RUNNER_TEMP is not a non-root existing absolute directory: %q\n' "${RUNNER_TEMP:-}" >&2
             exit 1
           fi
-          # Reconstruct the only path this run is allowed to remove. Do not trust
-          # B06_UPSTREAM_DIR merely because it is under the expected namespace:
-          # an injected suffix containing path traversal could still widen rm -rf.
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
+            printf 'refusing B06 cleanup because run identity is invalid: run=%q attempt=%q\n' "${GITHUB_RUN_ID:-}" "${GITHUB_RUN_ATTEMPT:-}" >&2
+            exit 1
+          fi
           expected_upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           upstream_dir="${B06_UPSTREAM_DIR:-$expected_upstream_dir}"
           if [[ "$upstream_dir" != "$expected_upstream_dir" ]]; then
             printf 'refusing unexpected B06 cleanup path: %q (expected %q)\n' "$upstream_dir" "$expected_upstream_dir" >&2
             exit 1
           fi
-          # -e is false for a dangling symlink. Include -L so a stale symlink at
-          # the deterministic scratch path cannot survive cleanup between runs.
           if [[ -e "$upstream_dir" || -L "$upstream_dir" ]]; then
             rm -rf -- "$upstream_dir"
           fi
