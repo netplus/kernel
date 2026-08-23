@@ -188,9 +188,10 @@ runner prerequisites:
   actual uname platform must be Linux on x86-64 (x86_64/amd64)
   Git >= 2.18
   Python >= 3.9
-  git, python3, uname, grep, tee, mktemp and rm must all be available
+  git, python3, uname, grep, tee, mktemp, rm and pwd must all be available
   RUNNER_TEMP must be non-empty, absolute, an existing non-symlink directory,
-    not '/', and contain neither CR nor LF
+    not '/', contain neither CR nor LF, and equal the canonical physical path
+    returned by `cd -- "$RUNNER_TEMP" && pwd -P`
   GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must each be positive decimal integers
   prerequisite failures occur before checkout/test evidence is produced
 
@@ -239,7 +240,8 @@ persistent-runner hygiene:
   cleanup is an always() failure-path step and therefore revalidates RUNNER_TEMP
     independently instead of assuming the earlier prerequisite step succeeded;
     RUNNER_TEMP must again be non-empty, absolute, an existing non-symlink
-    directory, not '/', and contain neither CR nor LF, otherwise cleanup
+    directory, not '/', contain neither CR nor LF, and equal its canonical
+    physical path from `cd -- "$RUNNER_TEMP" && pwd -P`; otherwise cleanup
     refuses every rm -rf operation
   cleanup also independently revalidates GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT
     as positive decimal integers before reconstructing any removable path; a
@@ -254,7 +256,7 @@ persistent-runner hygiene:
   final course HEAD must still equal GITHUB_SHA and its worktree must be clean
 ```
 
-The non-symlink condition prevents a runner-provided scratch root from redirecting the physical deletion root while retaining the same path string. The CR/LF restriction is also part of the execution contract because `B06_UPSTREAM_DIR=<value>` is propagated through GitHub's line-oriented environment file; a newline-bearing root would corrupt that cross-step representation.
+The canonical-physical-path condition is stronger than checking only `! -L "$RUNNER_TEMP"`: it also rejects a scratch root reached through a symlinked parent, or a logical path containing `.`/`..` whose byte string differs from the filesystem's physical canonical path. This keeps the path used to authorize destructive cleanup identical to the directory the filesystem actually resolves. The CR/LF restriction is also part of the execution contract because `B06_UPSTREAM_DIR=<value>` is propagated through GitHub's line-oriented environment file; a newline-bearing root would corrupt that cross-step representation.
 
 The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix. Because cleanup runs under `always()`, its destructive-root and run-identity validation are deliberately repeated inside the cleanup step: a failed prerequisite check must never be treated as proof that `RUNNER_TEMP`, `GITHUB_RUN_ID`, or `GITHUB_RUN_ATTEMPT` is safe for deletion.
 
