@@ -60,10 +60,6 @@ jobs:
           set -euo pipefail
           expected_upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           upstream_dir="$expected_upstream_dir"
-          if [[ "$upstream_dir" != "$expected_upstream_dir" ]]; then
-            printf 'refusing unexpected B06 upstream path: %q\n' "$upstream_dir" >&2
-            exit 1
-          fi
           rm -rf -- "$upstream_dir"
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
