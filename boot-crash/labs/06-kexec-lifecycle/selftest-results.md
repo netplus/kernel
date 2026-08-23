@@ -152,9 +152,9 @@ arch/x86/kernel/machine_kexec_64.c
   a29a44a98e5bef10751af769bd198d783e23b9fd
 ```
 
-A fresh repository-API audit on 2026-08-22 fetched these four paths explicitly at commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442` and reconfirmed the same blob identities. This matters because it independently checks that the manual source baseline has not drifted while local Git/DNS access remains unavailable. It is still **source-provenance evidence, not execution evidence**: the connector fetch does not create a local Git worktree on which `verify_source_contract.py` can be executed.
+Repository-API audits have fetched these four paths explicitly at commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442` and reconfirmed the same blob identities. The latest independent audit is recorded in [`upstream-source-audit-2026-08-24.md`](upstream-source-audit-2026-08-24.md); it supersedes the older 2026-08-22 freshness note for current manual-provenance status. This matters because it independently checks that the manual source baseline has not drifted while local Git/DNS access remains unavailable. It is still **source-provenance evidence, not execution evidence**: the connector fetch does not create a local Git worktree on which `verify_source_contract.py` can be executed.
 
-The audit reconfirmed the checker model:
+The latest audit reconfirmed the checker model, including the following source facts:
 
 ```text
 1. kexec_load and kexec_file_load are distinct load APIs; each has a
@@ -169,8 +169,10 @@ The audit reconfirmed the checker model:
    when !kexec_on_panic.
 6. machine_kexec_prepare(image) occurs in both load paths before persistent
    installation.
-7. x86-64 machine_kexec_prepare() calls init_pgtable(); the source states
-   the point-of-no-return rule immediately before machine_kexec().
+7. x86-64 machine_kexec_prepare() calls init_pgtable(); init_pgtable() uses
+   kernel_ident_mapping_init() for transition identity mappings, and the
+   source states the point-of-no-return rule immediately before
+   machine_kexec().
 ```
 
 This is **manual L1 source revalidation**, not an automated checker PASS.
