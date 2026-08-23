@@ -64,6 +64,23 @@ Could not resolve host: github.com
 - `verify_source_contract.py` failure；
 - upstream Linux v5.10 source-contract failure。
 
+## 2026-08-24：跨日重试
+
+在新的独立目标目录再次执行 course materialization：
+
+```text
+git clone --depth 1 https://github.com/netplus/kernel.git /tmp/b06-auto9
+```
+
+结果仍在取得任何 repository object 前失败：
+
+```text
+fatal: unable to access 'https://github.com/netplus/kernel.git/':
+Could not resolve host: github.com
+```
+
+这次跨日重试说明当前执行环境的 DNS/network 条件尚未恢复；它**不增加** fixture 或 upstream L1 验收证据，也不改变下面的重试边界。后续在环境条件没有变化时，不再通过重复 clone 累积同类记录。
+
 本次没有产生以下证据，禁止把人工源码复核或 workflow machine gates 写成这些 PASS：
 
 ```text
