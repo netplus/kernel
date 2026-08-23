@@ -155,6 +155,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # This step runs even when the prerequisite step failed. Revalidate the
+          # destructive-cleanup root here instead of relying on an earlier gate.
+          if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" ]]; then
+            printf 'refusing B06 cleanup because RUNNER_TEMP is not a non-root existing absolute directory: %q\n' "${RUNNER_TEMP:-}" >&2
+            exit 1
+          fi
           # Reconstruct the only path this run is allowed to remove. Do not trust
           # B06_UPSTREAM_DIR merely because it is under the expected namespace:
           # an injected suffix containing path traversal could still widen rm -rf.
