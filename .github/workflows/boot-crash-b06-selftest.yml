@@ -33,8 +33,8 @@ jobs:
             x86_64|amd64) ;;
             *) printf 'B06 workflow requires an x86-64 runner; got %s\n' "$arch" >&2; exit 1 ;;
           esac
-          if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" ]]; then
-            printf 'B06 workflow requires RUNNER_TEMP to name a non-root existing absolute directory; got %q\n' "${RUNNER_TEMP:-}" >&2
+          if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" || "$RUNNER_TEMP" == *$'\n'* || "$RUNNER_TEMP" == *$'\r'* ]]; then
+            printf 'B06 workflow requires RUNNER_TEMP to name a non-root existing absolute directory without CR/LF; got %q\n' "${RUNNER_TEMP:-}" >&2
             exit 1
           fi
           if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
@@ -159,8 +159,8 @@ jobs:
           # This step runs even when the prerequisite step failed. Revalidate the
           # destructive-cleanup root and run identity here instead of relying on
           # an earlier gate.
-          if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" ]]; then
-            printf 'refusing B06 cleanup because RUNNER_TEMP is not a non-root existing absolute directory: %q\n' "${RUNNER_TEMP:-}" >&2
+          if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" || "$RUNNER_TEMP" == *$'\n'* || "$RUNNER_TEMP" == *$'\r'* ]]; then
+            printf 'refusing B06 cleanup because RUNNER_TEMP is not a non-root existing absolute directory without CR/LF: %q\n' "${RUNNER_TEMP:-}" >&2
             exit 1
           fi
           if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
