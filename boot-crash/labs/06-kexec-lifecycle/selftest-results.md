@@ -232,6 +232,10 @@ persistent-runner hygiene:
     from RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT:
     $RUNNER_TEMP/kernel-course-b06-linux-v5.10-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT
   prepare removes only that exact path before publishing B06_UPSTREAM_DIR
+  cleanup is an always() failure-path step and therefore revalidates RUNNER_TEMP
+    independently instead of assuming the earlier prerequisite step succeeded;
+    RUNNER_TEMP must again be non-empty, absolute, an existing directory, and
+    not '/', otherwise cleanup refuses every rm -rf operation
   cleanup independently reconstructs the same exact path; if a published
     B06_UPSTREAM_DIR differs byte-for-byte, cleanup refuses rm -rf
   cleanup can reconstruct the exact path even when preparation failed before
@@ -242,7 +246,7 @@ persistent-runner hygiene:
   final course HEAD must still equal GITHUB_SHA and its worktree must be clean
 ```
 
-The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix.
+The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix. Because cleanup runs under `always()`, its destructive-root validation is deliberately repeated inside the cleanup step: a failed prerequisite check must never be treated as proof that `RUNNER_TEMP` is safe for deletion.
 
 The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
 
