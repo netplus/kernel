@@ -42,16 +42,18 @@ git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 
 - runner 实际为 Linux/x86-64，Git >= 2.18、Python >= 3.9，且所需外部命令存在；
 - `$RUNNER_TEMP` 必须非空、为绝对路径、已经存在为目录，并且不能是根目录 `/`；该检查发生在任何 checkout/materialization 之前。因为后续会在此根目录下构造确定性的 upstream scratch path 并执行 `rm -rf`，所以不满足这一条件属于 runner prerequisite failure，而不是 B06 fixture/source-contract failure；显式拒绝 `/` 也保证 B06 的 destructive cleanup 不会退化到文件系统根目录命名空间；
+- `GITHUB_RUN_ID` 与 `GITHUB_RUN_ATTEMPT` 必须分别是正整数。二者不是普通日志字段，而是与 `RUNNER_TEMP` 一起构成本次 run 唯一 upstream scratch path 的身份输入；任一值为空、非数字或为零时，必须在 checkout/materialization 前按 runner prerequisite failure 退出；
 - course `HEAD == GITHUB_SHA`，course worktree clean；
 - checker/fixture 的 committed blob 与 worktree blob 均严格匹配当前 exact baseline；
 - fixture 必须报告 `Ran 22 tests` 与 `OK`；
 - upstream `HEAD` 必须精确等于 Linux v5.10 commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442`，执行前后 worktree 均 clean；
 - checker 必须恰好得到 `PASS 1..7` 和最终 7-group summary；
 - `$RUNNER_TEMP` 中的 upstream tree 在 `always()` cleanup 中删除；cleanup **不能依赖前置 prerequisite 已经成功**，因为 prerequisite 本身失败时 `always()` 仍会执行。因此 cleanup step 会独立重新验证 `$RUNNER_TEMP` 仍满足“非空、现有绝对目录、且不是 `/`”后，才允许构造任何删除目标；若根路径校验失败，则明确拒绝 cleanup，绝不执行 `rm -rf`；
+- cleanup 同样必须独立重新验证 `GITHUB_RUN_ID` 与 `GITHUB_RUN_ATTEMPT` 都是正整数，不能因为前置 prerequisite 曾包含同一检查就继承信任；run identity 无效时不得重建删除路径，也不得执行 `rm -rf`；
 - cleanup 也不依赖 prepare step 已成功发布 `B06_UPSTREAM_DIR`：若环境变量尚不存在，会由 `$RUNNER_TEMP`、`GITHUB_RUN_ID` 和 `GITHUB_RUN_ATTEMPT` 重建本次 run 唯一允许的确定路径；若环境变量已经存在，也必须与这个独立重建的路径逐字相等，否则拒绝执行 `rm -rf`。因此 prepare 阶段提前失败仍可清理本次 scratch object，而损坏、注入额外后缀或包含路径遍历成分的 `B06_UPSTREAM_DIR` 都不能扩大 destructive cleanup 边界；cleanup 同时以 `-e` 与 `-L` 判断目标，删除后同时断言目标既不存在也不是 symbolic link，因此 dangling symlink 也不能绕过清理并跨 run 残留；
 - course checkout 在执行后再次验证 HEAD 与 clean 状态；该 post-execution gate 只有本次 `Checkout course repository` step 成功时才运行。若 checkout 本身失败，失败应保留为 checkout/infrastructure failure，不能在 persistent runner 上继续读取可能属于旧 run 的工作树并生成伪 provenance failure。
 
-这里的删除边界必须理解为 **exact-path identity gate**，而不是“路径位于某个 glob/prefix namespace 即可”。合法目标由本次 run 的 `RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT` 唯一决定；prepare 与 cleanup 都只能删除这一对象。特别地，`always()` cleanup 必须自行重新建立对 `RUNNER_TEMP` 根路径的信任，不能把“前置 prerequisite step 已经检查过”当作 cleanup 的前提，因为该 step 失败正是 cleanup 仍可能被调度执行的路径之一。
+这里的删除边界必须理解为 **exact-path identity gate**，而不是“路径位于某个 glob/prefix namespace 即可”。合法目标由本次 run 的 `RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT` 唯一决定；prepare 与 cleanup 都只能删除这一对象。特别地，`always()` cleanup 必须自行重新建立对 `RUNNER_TEMP` 根路径和 run identity 两类输入的信任，不能把“前置 prerequisite step 已经检查过”当作 cleanup 的前提，因为该 step 失败正是 cleanup 仍可能被调度执行的路径之一。
 
 这些 machine gates 只定义“什么样的 run 才是有效证据”，并不等于已经实际运行成功。当前尚未取得匹配 `kernel-course` self-hosted runner 上的 22/22 + 7/7 执行记录，因此 B06 状态不变。
 
