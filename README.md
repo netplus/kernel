@@ -1,6 +1,23 @@
-# Linux Kernel 5.10 基础机制学习
+# Linux Kernel 课程与专题学习
 
-这个仓库用于系统学习 Linux kernel 5.10 中最基础、最重要的运行机制。课程主要回答下面几个问题：
+这个仓库用于系统学习 Linux 内核中最基础、最重要的运行机制，并在基础课程之外逐步扩展网络等专题。
+
+现有基础课程已经按 **Linux kernel 5.10** 建立并核验；新启用的 [`network/`](network/) 专题按其目录规则使用 **upstream Linux v6.12**。不同版本的实现不能混写成同一条调用路径，也不能通过机械替换版本号宣称已经完成迁移。
+
+## 基础课程目录
+
+```text
+kernel/
+├── assembly/           x86-64 指令、栈、ABI、系统调用和异常入口
+├── boot-crash/         x86_64 启动、Kexec、Kdump、双内核和 vmcore
+├── memory/             页表、memblock、伙伴系统、SLUB、缺页和回收
+├── timekeeping/        clocksource、clockevent、tick、timer 和 hrtimer
+├── scheduler/          任务、运行队列、唤醒、抢占和上下文切换
+├── integrated-paths/   将上述机制串联成完整执行过程
+└── network/            Linux 网络协议栈、Netfilter/nftables、routing 等专题
+```
+
+## 基础课程学习问题
 
 ```text
 CPU 如何执行内核代码？
@@ -12,119 +29,67 @@ CPU 如何执行内核代码？
 系统崩溃后，如何通过 Kdump 和 vmcore 保留并分析现场？
 ```
 
-本阶段不系统展开 cgroup、VFS、namespace、网络协议栈、eBPF 等功能扩展类内容。分析基础机制时如果遇到这些概念，只补充理解当前问题所需的背景。相关专题可以在完成本阶段后再单独学习。
-
-## 本阶段课程目录
+基础课程推荐顺序仍然是：
 
 ```text
-kernel/
-├── assembly/           x86-64 指令、栈、ABI、系统调用和异常入口
-├── boot-crash/         x86_64 启动、Kexec、Kdump、双内核和 vmcore
-├── memory/             页表、memblock、伙伴系统、SLUB、缺页和回收
-├── timekeeping/        clocksource、clockevent、tick、timer 和 hrtimer
-├── scheduler/          任务、运行队列、唤醒、抢占和上下文切换
-└── integrated-paths/   将上述机制串联成完整执行过程
+assembly
+→ boot-crash + memory
+→ memory + timekeeping + scheduler
+→ Kexec/Kdump/vmcore
+→ integrated-paths
 ```
 
-仓库中已经存在的 `network/` 目录保留为后续专题，不属于本阶段的学习主线。
-
-## 各领域之间的关系
-
-这些领域分别整理，但实际运行时彼此联系紧密。
+这些领域分别整理，但实际运行时彼此联系紧密：
 
 - 汇编知识用于理解寄存器、栈、系统调用、异常入口、启动入口和上下文切换；
 - 启动过程会建立早期页表、初始化内存管理，并逐步启动时钟和调度器；
 - 内存管理负责地址映射、物理页分配、内核对象分配和缺页处理；
 - 时间子系统向内核提供时间，并安排周期性或一次性的事件；
 - 调度器根据任务状态、运行时间和优先级选择下一个任务；
-- Kexec 和 Kdump 在当前内核之外准备另一套内核，用于快速切换或保存崩溃现场。
+- Kexec/Kdump 在当前内核之外准备另一套内核，用于快速切换或保存崩溃现场。
 
-因此，课程既可以按领域逐章学习，也可以沿完整执行过程进行分析。
+## Network 专题
 
-## 推荐学习顺序
+[`network/`](network/) 已从“后续占位专题”转为正式学习专题，当前从 **Netfilter/nftables** 切入。
 
-### 第一阶段：机器执行基础
+当前入口：
 
-先学习 [`assembly/`](assembly/)：
+- [`network/README.md`](network/)：网络专题总纲和当前进度；
+- [`network/docs/nftables/00-learning-plan.md`](network/docs/nftables/00-learning-plan.md)：NF00～NF13 学习计划；
+- [`network/docs/nftables/01-ruleset-evaluation-and-control-flow.md`](network/docs/nftables/01-ruleset-evaluation-and-control-flow.md)：已学 ruleset evaluator 与控制流；
+- [`network/docs/nftables/02-counter-log-and-rule-operations.md`](network/docs/nftables/02-counter-log-and-rule-operations.md)：已学 counter/log/handle；
+- [`network/source-paths/nftables-v6.12.md`](network/source-paths/nftables-v6.12.md)：Linux v6.12 源码闭环；
+- [`network/labs/nftables/01-counter-log/README.md`](network/labs/nftables/01-counter-log/README.md)：counter/log 最小实验。
 
-```text
-寄存器和数据宽度
-→ 地址和内存访问
-→ 标志位和控制流
-→ 算术和循环
-→ 栈、函数调用和 ABI
-→ 系统调用、异常和中断入口
-```
-
-这些内容是阅读启动代码、缺页入口和上下文切换代码的基础。
-
-### 第二阶段：x86_64 启动和早期内存
-
-交叉学习：
-
-- [`boot-crash/`](boot-crash/) 中的正常启动过程；
-- [`memory/`](memory/) 中的页表、内存布局和 memblock。
-
-重点理解内核如何从早期汇编入口进入 `start_kernel()`，并建立后续运行所需的地址空间和内存管理基础。
-
-### 第三阶段：内核运行基础
-
-继续学习：
-
-- [`memory/`](memory/)：伙伴系统、SLUB、进程地址空间、缺页和回收；
-- [`timekeeping/`](timekeeping/)：时间读取、时钟事件、tick 和定时器；
-- [`scheduler/`](scheduler/)：任务状态、运行队列、唤醒、抢占和上下文切换。
-
-这三个领域需要交叉学习，因为缺页和内存回收可能使任务阻塞，时钟会推动运行时间统计，调度器则决定任务何时继续运行。
-
-### 第四阶段：Kexec、Kdump 和 vmcore
-
-学习 [`boot-crash/`](boot-crash/) 中的：
+当前 nftables 进度：
 
 ```text
-Kexec 加载和切换
-→ crashkernel 内存预留
-→ 生产内核与捕获内核
-→ panic 和 crash_kexec
-→ /proc/vmcore
-→ makedumpfile
-→ crash 分析
+ruleset evaluation                 已完成
+jump/goto/return/verdict           已完成
+counter/log/handle                 已完成
+nft monitor trace                  下一课
+Netfilter hooks + packet path      待学习
+conntrack/NAT                      待学习
+sets/maps/verdict maps             待学习
+mark + policy routing              待学习
+route chain                        待学习
+families/stateful objects          待学习
+flowtable                          待学习
+v6.12 evaluator 深入               持续推进
 ```
 
-重点理解两套内核如何交接 CPU 控制权和物理内存，以及崩溃现场如何被保存下来。
-
-### 第五阶段：完整执行过程
-
-最后通过 [`integrated-paths/`](integrated-paths/) 分析：
+Network 专题当前内核事实基线：
 
 ```text
-系统调用进入和返回
-时钟中断触发调度
-任务睡眠和唤醒
-缺页异常
-fork 与 Copy-on-Write
-上下文切换和地址空间切换
-x86_64 启动
-Kexec 与 Kdump
+Linux tag: v6.12
+upstream commit: adc218676eef25575469234709c2d87185ca223a
 ```
 
-## 本阶段暂不展开的内容
+具体核验规则见 [`network/AGENTS.md`](network/AGENTS.md)。
 
-下面这些内容很重要，但更适合在掌握基础机制后单独学习：
+## 版本与实验基线
 
-```text
-VFS 和具体文件系统
-cgroup 和资源控制
-namespace 和容器隔离
-网络协议栈
-Netfilter、traffic control 和 eBPF
-设备模型和具体驱动框架
-安全子系统
-```
-
-本阶段遇到这些内容时，只说明它们与当前机制的直接关系。
-
-## 源码和实验环境
+基础课程历史基线：
 
 ```text
 内核版本：Linux kernel 5.10
@@ -133,3 +98,13 @@ Netfilter、traffic control 和 eBPF
 主要汇编语法：AT&T
 用户态 ABI：System V AMD64 ABI
 ```
+
+Network 专题：
+
+```text
+内核版本：upstream Linux v6.12
+主要架构：x86-64（架构相关内容）
+Netfilter/nftables 实现结论必须回到 v6.12 源码核验
+```
+
+如果未来要把现有 5.10 基础课程整体迁移到 6.12，应作为独立迁移任务逐章重做源码、实验和自动检查核验，而不是仅修改文档版本号。

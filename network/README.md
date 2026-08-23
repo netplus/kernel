@@ -1,8 +1,20 @@
-# Linux Kernel 5.10 网络协议栈（后续专题）
+# Linux Kernel 6.12 网络专题
 
-网络协议栈不属于当前“内核基础机制”学习阶段。完成汇编、x86_64 启动、内存管理、时钟、调度、Kexec、Kdump 和 vmcore 分析后，再进入本专题。
+本专题系统学习 Linux 网络数据路径，并以 **upstream Linux v6.12** 为内核实现事实基线。当前先从 Netfilter/nftables 切入，再逐步向收发路径、路由、conntrack、NAT、socket、TCP、TC/XDP 等方向扩展。
 
-## 学习主线
+> v6.12 固定源码基线：`adc218676eef25575469234709c2d87185ca223a`。
+
+## 当前学习入口
+
+当前主线是 nftables：
+
+- [nftables 学习计划](docs/nftables/00-learning-plan.md)
+- [ruleset evaluation 与控制流](docs/nftables/01-ruleset-evaluation-and-control-flow.md)
+- [counter、log 与 rule 运维](docs/nftables/02-counter-log-and-rule-operations.md)
+- [Linux v6.12 nftables 源码入口](source-paths/nftables-v6.12.md)
+- [counter/log 最小实验](labs/nftables/01-counter-log/README.md)
+
+## 网络专题总主线
 
 接收方向：
 
@@ -15,6 +27,8 @@
 → sk_buff
 → 二层处理
 → IP
+→ 路由
+→ Netfilter
 → TCP/UDP
 → socket 接收队列
 → 唤醒用户进程
@@ -27,6 +41,8 @@
 → socket
 → TCP/UDP
 → IP
+→ 路由
+→ Netfilter
 → 邻居子系统
 → qdisc
 → 驱动发送队列
@@ -34,7 +50,37 @@
 → 发送完成
 ```
 
-## 课程大纲
+## N08：Netfilter / nftables 当前课程路线
+
+这一部分优先推进，并与 Linux 网络路径、路由和 conntrack 交叉学习。
+
+```text
+NF00  ruleset evaluation 与基本对象                 已完成
+NF01  jump/goto/return/verdict 精确控制流            已完成
+NF02  counter/log/handle 与最小观测实验              已完成
+NF03  nft monitor trace                               下一课
+NF04  Netfilter hooks 与完整 packet path
+NF05  conntrack：tuple、state、ct mark
+NF06  NAT 与 conntrack binding
+NF07  sets/maps/verdict maps/concatenation
+NF08  meta mark、ct mark、RPDB 与 policy routing
+NF09  route chain 与 OUTPUT reroute
+NF10  address families：ip/ip6/inet/bridge/netdev
+NF11  limit/quota/meter/dynamic set 等 stateful object
+NF12  flowtable 与 fast path
+NF13  Linux v6.12 nf_tables evaluator 源码深入
+```
+
+学习方法不是按语法表背命令，而是始终维护下面四个问题：
+
+```text
+1. packet 当前位于 Linux 网络路径的哪个位置？
+2. 当前由哪个 Netfilter hook/base chain 接管？
+3. nft evaluator 此刻正在执行哪个 rule/expression/verdict？
+4. packet、skb metadata、conntrack 或 routing state 被怎样读取/修改？
+```
+
+## 完整网络课程大纲
 
 ### N00：网络协议栈总体结构
 
@@ -46,22 +92,20 @@
 
 ### N01：`sk_buff`
 
-- head、data、tail 和 end；
+- head、data、tail、end；
 - 线性区与分片；
-- clone、copy 和引用计数；
+- clone/copy/引用计数；
 - 协议头偏移；
 - checksum 状态；
-- GSO 和 GRO 元数据；
-- 分配、传递和释放过程。
+- GSO/GRO 元数据；
+- 分配、传递和释放。
 
-### N02：`net_device` 与网卡驱动接口
+### N02：`net_device` 与驱动接口
 
 - `struct net_device`；
 - `net_device_ops`；
 - RX/TX queue；
-- 描述符环；
-- DMA；
-- carrier 和链路状态；
+- 描述符环、DMA、carrier；
 - 多队列和 RSS。
 
 ### N03：中断、NAPI 与网络软中断
@@ -75,22 +119,12 @@
 → napi_gro_receive
 ```
 
-重点理解：
-
-- 为什么不能在硬中断中处理全部报文；
-- NAPI budget；
-- 中断抑制；
-- GRO；
-- softirq 与 `ksoftirqd`。
-
 ### N04：二层接收和协议分发
 
 - `netif_receive_skb()`；
-- `__netif_receive_skb_core()`；
-- Ethernet；
-- VLAN；
+- Ethernet/VLAN；
 - packet type；
-- bridge、bonding 和 AF_PACKET 的位置。
+- bridge、bonding、AF_PACKET。
 
 ### N05：IPv4 接收路径
 
@@ -99,58 +133,40 @@ ip_rcv
 → PRE_ROUTING
 → ip_rcv_finish
 → 路由判断
-→ ip_local_deliver 或 ip_forward
+→ ip_local_deliver / ip_forward
 ```
-
-重点包括：
-
-- IP 头检查；
-- 本机接收与转发；
-- 分片和重组；
-- 上层协议分发。
 
 ### N06：路由与 FIB
 
-- 路由表；
-- FIB trie；
-- 输入路由和输出路由；
+- FIB；
+- 输入/输出路由；
 - nexthop；
-- policy routing；
-- 路由结果在收发路径中的作用。
+- RPDB/policy routing；
+- route cache/result 与网络路径。
 
 ### N07：邻居子系统
 
-- ARP 和 IPv6 ND；
+- ARP/IPv6 ND；
 - neighbour table；
-- NUD 状态；
+- NUD；
 - 未解析报文队列；
-- 定时器和垃圾回收；
-- 邻居解析与发送路径的关系。
+- 定时器和垃圾回收。
 
-### N08：Netfilter 与 NAT
+### N08：Netfilter 与 nftables
 
-- hook 点；
-- conntrack；
-- tuple 和连接状态；
-- DNAT 与 SNAT；
-- 本机、转发和输出路径；
-- nftables 与内核 hook 的关系。
+见上面的 NF00～NF13 课程路线。
 
 ### N09：UDP
 
-- bind 与端口查找；
+- bind/端口查找；
 - 接收队列；
 - checksum；
-- 分片；
-- 多播；
-- error queue。
+- 分片、多播、error queue。
 
 ### N10：TCP 状态机与连接建立
 
-- socket 状态；
 - listen socket；
-- SYN queue 和 accept queue；
-- 三次握手；
+- SYN queue/accept queue；
 - request socket；
 - SYN cookie；
 - established hash。
@@ -161,68 +177,48 @@ ip_rcv
 tcp_v4_rcv
 → tcp_v4_do_rcv
 → tcp_rcv_established
-→ ACK 或数据处理
+→ ACK/数据处理
 → socket 接收队列
 → 任务唤醒
 ```
 
-重点包括：
-
-- sequence space；
-- 乱序队列；
-- ACK；
-- 接收窗口；
-- delayed ACK；
-- 用户进程唤醒。
-
 ### N12：TCP 发送、拥塞控制与重传
 
-- 发送队列；
-- 分段；
-- congestion window；
-- pacing；
+- send queue；
+- cwnd/pacing；
 - RTO；
 - 快速重传；
-- 重传定时器；
 - 拥塞控制状态更新。
 
 ### N13：Socket 与用户进程
 
-- `struct socket`、`struct sock`、`inet_sock` 和 `tcp_sock`；
-- 文件描述符与 socket 的连接；
-- 阻塞与非阻塞；
+- `struct socket` / `struct sock` / `inet_sock` / `tcp_sock`；
+- fd 与 socket；
 - wait queue；
-- poll 和 epoll；
+- poll/epoll；
 - socket 唤醒与调度。
 
 ### N14：发送路径与 Qdisc
 
 - `dev_queue_xmit()`；
-- qdisc enqueue 和 dequeue；
-- 流量排队；
-- watchdog；
+- qdisc enqueue/dequeue；
 - BQL；
-- 驱动 TX ring；
-- 发送完成与报文释放。
+- TX ring；
+- completion 与 skb 释放。
 
 ### N15：XDP、TC 与 eBPF
 
-- XDP hook；
-- native、generic 和 offload；
-- TC ingress 与 egress；
-- verifier；
-- BPF map；
-- redirect；
-- socket map 和 SK_MSG；
-- JIT 与机器指令。
+- XDP native/generic/offload；
+- TC ingress/egress；
+- verifier/map/redirect；
+- JIT。
 
 ### N16：网络隔离与资源控制概览
 
 - network namespace；
-- veth 和 bridge；
-- 容器网络基本路径；
+- veth/bridge；
 - cgroup BPF；
-- 本章只说明这些机制如何接入网络栈，详细内容以后另行展开。
+- 容器网络路径。
 
 ### N17：网络观测与故障分析
 
@@ -231,14 +227,13 @@ tcp_v4_rcv
 - ethtool；
 - nstat；
 - dropwatch；
-- ftrace 和 tracepoint；
-- perf 与 eBPF tracing；
-- crash 中查看 socket、skb 和队列。
+- `nft monitor trace`；
+- ftrace/tracepoint/perf/eBPF；
+- crash 中的 socket/skb/队列。
 
 ## 推荐源码入口
 
 ```text
-drivers/net/
 net/core/dev.c
 net/core/skbuff.c
 net/core/sock.c
@@ -255,4 +250,4 @@ include/linux/skbuff.h
 include/net/sock.h
 ```
 
-本专题安排在基础机制课程之后学习。
+具体内核实现结论以 `network/AGENTS.md` 规定的 upstream Linux v6.12 基线逐项核验。
