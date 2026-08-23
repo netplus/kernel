@@ -189,7 +189,8 @@ runner prerequisites:
   Git >= 2.18
   Python >= 3.9
   git, python3, uname, grep, tee, mktemp and rm must all be available
-  RUNNER_TEMP must be non-empty, absolute, an existing directory, and not '/'
+  RUNNER_TEMP must be non-empty, absolute, an existing non-symlink directory,
+    not '/', and contain neither CR nor LF
   GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must each be positive decimal integers
   prerequisite failures occur before checkout/test evidence is produced
 
@@ -237,8 +238,9 @@ persistent-runner hygiene:
   prepare removes only that exact path before publishing B06_UPSTREAM_DIR
   cleanup is an always() failure-path step and therefore revalidates RUNNER_TEMP
     independently instead of assuming the earlier prerequisite step succeeded;
-    RUNNER_TEMP must again be non-empty, absolute, an existing directory, and
-    not '/', otherwise cleanup refuses every rm -rf operation
+    RUNNER_TEMP must again be non-empty, absolute, an existing non-symlink
+    directory, not '/', and contain neither CR nor LF, otherwise cleanup
+    refuses every rm -rf operation
   cleanup also independently revalidates GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT
     as positive decimal integers before reconstructing any removable path; a
     failed prerequisite step is not evidence that the run identity is safe
@@ -251,6 +253,8 @@ persistent-runner hygiene:
   temporary upstream checkout is removed on success or failure
   final course HEAD must still equal GITHUB_SHA and its worktree must be clean
 ```
+
+The non-symlink condition prevents a runner-provided scratch root from redirecting the physical deletion root while retaining the same path string. The CR/LF restriction is also part of the execution contract because `B06_UPSTREAM_DIR=<value>` is propagated through GitHub's line-oriented environment file; a newline-bearing root would corrupt that cross-step representation.
 
 The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix. Because cleanup runs under `always()`, its destructive-root and run-identity validation are deliberately repeated inside the cleanup step: a failed prerequisite check must never be treated as proof that `RUNNER_TEMP`, `GITHUB_RUN_ID`, or `GITHUB_RUN_ATTEMPT` is safe for deletion.
 
