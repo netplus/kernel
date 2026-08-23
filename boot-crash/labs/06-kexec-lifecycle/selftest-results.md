@@ -190,10 +190,13 @@ runner prerequisites:
   Python >= 3.9
   git, python3, uname, grep, tee, mktemp and rm must all be available
   RUNNER_TEMP must be non-empty, absolute, an existing directory, and not '/'
+  GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must each be positive decimal integers
   prerequisite failures occur before checkout/test evidence is produced
 
 run identity and serialization:
   workflow_dispatch establishes the selected GITHUB_SHA
+  GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT identify the unique scratch object for
+    this workflow attempt; empty, non-numeric, or zero values are rejected
   checked-out course HEAD must equal that GITHUB_SHA
   concurrency group boot-crash-b06-selftest serializes evidence-producing runs
   cancel-in-progress is false, so a queued manual run does not cancel an
@@ -236,6 +239,9 @@ persistent-runner hygiene:
     independently instead of assuming the earlier prerequisite step succeeded;
     RUNNER_TEMP must again be non-empty, absolute, an existing directory, and
     not '/', otherwise cleanup refuses every rm -rf operation
+  cleanup also independently revalidates GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT
+    as positive decimal integers before reconstructing any removable path; a
+    failed prerequisite step is not evidence that the run identity is safe
   cleanup independently reconstructs the same exact path; if a published
     B06_UPSTREAM_DIR differs byte-for-byte, cleanup refuses rm -rf
   cleanup can reconstruct the exact path even when preparation failed before
@@ -246,9 +252,9 @@ persistent-runner hygiene:
   final course HEAD must still equal GITHUB_SHA and its worktree must be clean
 ```
 
-The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix. Because cleanup runs under `always()`, its destructive-root validation is deliberately repeated inside the cleanup step: a failed prerequisite check must never be treated as proof that `RUNNER_TEMP` is safe for deletion.
+The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix. Because cleanup runs under `always()`, its destructive-root and run-identity validation are deliberately repeated inside the cleanup step: a failed prerequisite check must never be treated as proof that `RUNNER_TEMP`, `GITHUB_RUN_ID`, or `GITHUB_RUN_ATTEMPT` is safe for deletion.
 
-The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
+The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, a specific workflow run attempt, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
 
 ## 7. Next acceptance action
 
