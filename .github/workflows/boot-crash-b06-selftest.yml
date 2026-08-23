@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for command in git python3 uname grep tee mktemp rm; do
+          for command in git python3 uname grep tee mktemp rm pwd; do
             command -v "$command"
           done
           os="$(uname -s)"
@@ -35,6 +35,11 @@ jobs:
           esac
           if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" || -L "$RUNNER_TEMP" || "$RUNNER_TEMP" == *$'\n'* || "$RUNNER_TEMP" == *$'\r'* ]]; then
             printf 'B06 workflow requires RUNNER_TEMP to name a non-root existing absolute non-symlink directory without CR/LF; got %q\n' "${RUNNER_TEMP:-}" >&2
+            exit 1
+          fi
+          runner_temp_physical="$(cd -- "$RUNNER_TEMP" && pwd -P)"
+          if [[ "$runner_temp_physical" != "$RUNNER_TEMP" ]]; then
+            printf 'B06 workflow requires RUNNER_TEMP to be its canonical physical directory path; got %q -> %q\n' "$RUNNER_TEMP" "$runner_temp_physical" >&2
             exit 1
           fi
           if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
@@ -161,6 +166,11 @@ jobs:
           # an earlier gate.
           if [[ -z "${RUNNER_TEMP:-}" || "$RUNNER_TEMP" != /* || "$RUNNER_TEMP" = / || ! -d "$RUNNER_TEMP" || -L "$RUNNER_TEMP" || "$RUNNER_TEMP" == *$'\n'* || "$RUNNER_TEMP" == *$'\r'* ]]; then
             printf 'refusing B06 cleanup because RUNNER_TEMP is not a non-root existing absolute non-symlink directory without CR/LF: %q\n' "${RUNNER_TEMP:-}" >&2
+            exit 1
+          fi
+          runner_temp_physical="$(cd -- "$RUNNER_TEMP" && pwd -P)"
+          if [[ "$runner_temp_physical" != "$RUNNER_TEMP" ]]; then
+            printf 'refusing B06 cleanup because RUNNER_TEMP is not its canonical physical directory path: %q -> %q\n' "$RUNNER_TEMP" "$runner_temp_physical" >&2
             exit 1
           fi
           if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
