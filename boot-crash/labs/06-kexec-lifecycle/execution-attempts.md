@@ -45,7 +45,20 @@ fatal: unable to access 'https://github.com/netplus/kernel.git/':
 Could not resolve host: github.com
 ```
 
-因此该问题已由三次独立 clone 尝试复现；当前失败分类仍为 **执行环境 DNS/network blocker**，不是：
+第四次实际执行再次使用新的独立目标目录：
+
+```text
+git clone --depth 1 https://github.com/netplus/kernel.git /tmp/kernel-course-run10
+```
+
+结果仍在取得任何 repository object 前失败：
+
+```text
+fatal: unable to access 'https://github.com/netplus/kernel.git/':
+Could not resolve host: github.com
+```
+
+因此该问题已由四次独立 clone 尝试复现；当前失败分类仍为 **执行环境 DNS/network blocker**，不是：
 
 - 当前 22-case fixture failure；
 - `verify_source_contract.py` failure；
@@ -59,5 +72,17 @@ upstream Linux v5.10: PASS 1..7 / 7-group summary / exit 0
 ```
 
 GitHub repository connector 仍可读取和维护仓库内容，并可核对当前 exact checker/fixture blob；当前基线仍为 checker blob `5c89b67628cf55560089656d5b65e80ff74c556f`、fixture blob `f18918cfbe0b01ffba59be3ac083a9971295a2f8`。但 connector 不能把这些读取结果暴露成本地 Git worktree 供 `run_acceptance.sh` 按其 Git provenance contract 执行，因此不能绕过上述 blocker 伪造自动验收。
+
+### 重试边界
+
+连续复现同一个 DNS failure 不会增加 fixture 或 upstream L1 证据。后续仍应优先尝试真实验收，但只有以下任一条件变化时，materialization 才可能越过当前 blocker：
+
+```text
+当前执行环境恢复 github.com 的 DNS/Git 网络访问；或
+匹配 [self-hosted, linux, x64, kernel-course] 的 runner 可以实际调度；或
+出现另一套零新增费用、能够 materialize exact Git worktree 的执行环境。
+```
+
+在这些条件尚未变化时，不应把重复 DNS failure 误记为新的 checker regression，也不应通过放宽 exact commit/blob/provenance gate 来规避基础设施问题。若维护运行仍需推进仓库工作，应只处理能够明确影响 B06 验收正确性、证据可信度或 self-hosted runner 隔离性的具体问题。
 
 下一次具备可执行环境时，应直接运行当前 exact 验收路径；如果得到具体 fixture/checker failure，再把该 failure 作为下一修正单元并回到 upstream Linux v5.10 源码核验。
