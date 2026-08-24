@@ -38,23 +38,45 @@ git -C "$B06_UPSTREAM_DIR" fetch --depth=1 origin \
 git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 ```
 
-因此，上一 revision 中“当前 workflow 不能作为已经可执行的 B06 验收入口”的判断已经失效，不能继续作为 blocker。当前 workflow 的设计路径已经恢复为可执行状态，并继续机器验证：
+当前 workflow 的设计路径已经恢复为可执行状态，并继续机器验证：
 
 - runner 实际为 Linux/x86-64，Git >= 2.18、Python >= 3.9，且所需外部命令存在；
 - course checkout 固定使用 `actions/checkout@11d5960a326750d5838078e36cf38b85af677262`（官方 v4.4.0 release commit）。该固定 revision 的 `action.yml` 声明 `runs.using: node20`，因此匹配的 self-hosted runner 还必须能够承载 Node 20 Action runtime。固定 Action SHA 与 runtime metadata 已完成 provenance 核验，但真实 runner 的 runtime compatibility 只能由实际 workflow run 建立；若 checkout 因 Action runtime 不兼容失败，应分类为 self-hosted runner / Action runtime prerequisite failure，而不是 fixture 或 Linux v5.10 source-contract failure；
-- `$RUNNER_TEMP` 必须非空、为绝对路径、已经存在为目录、不能是 symbolic link、不能是根目录 `/`，并且字符串中不得包含 CR/LF；此外 workflow 会执行 `cd -- "$RUNNER_TEMP" && pwd -P`，要求得到的 canonical physical path 与 `$RUNNER_TEMP` 字节级相等。这个额外 gate 会拒绝父级 symlink、`.`、`..` 等虽然末级对象本身不是 symlink、但逻辑路径与实际物理删除根不一致的形式。该检查发生在任何 checkout/materialization 之前。因为后续会从该值构造 `B06_UPSTREAM_DIR` 并写入 GitHub environment file，同时在此根目录下执行受限 `rm -rf`，所以不满足任一条件都属于 runner prerequisite failure，而不是 B06 fixture/source-contract failure；拒绝 CR/LF 则保证 `B06_UPSTREAM_DIR=<value>` 的逐行 environment-file 传播不会被路径内容破坏；
-- `GITHUB_RUN_ID` 与 `GITHUB_RUN_ATTEMPT` 必须分别是正整数。二者不是普通日志字段，而是与 `RUNNER_TEMP` 一起构成本次 run 唯一 upstream scratch path 的身份输入；任一值为空、非数字或为零时，必须在 checkout/materialization 前按 runner prerequisite failure 退出；
+- `$RUNNER_TEMP` 必须非空、为绝对路径、已经存在为目录、不能是 symbolic link、不能是根目录 `/`，并且字符串中不得包含 CR/LF；此外 workflow 会执行 `cd -- "$RUNNER_TEMP" && pwd -P`，要求得到的 canonical physical path 与 `$RUNNER_TEMP` 字节级相等；
+- `GITHUB_RUN_ID` 与 `GITHUB_RUN_ATTEMPT` 必须分别是正整数；
 - course `HEAD == GITHUB_SHA`，course worktree clean；
 - checker/fixture 的 committed blob 与 worktree blob 均严格匹配当前 exact baseline；
 - fixture 必须报告 `Ran 22 tests` 与 `OK`；
 - upstream `HEAD` 必须精确等于 Linux v5.10 commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442`，执行前后 worktree 均 clean；
 - checker 必须恰好得到 `PASS 1..7` 和最终 7-group summary；
-- `$RUNNER_TEMP` 中的 upstream tree 在 `always()` cleanup 中删除；cleanup **不能依赖前置 prerequisite 已经成功**，因为 prerequisite 本身失败时 `always()` 仍会执行。因此 cleanup step 会独立重新验证 `$RUNNER_TEMP` 仍满足“非空、现有绝对目录、非 symbolic link、不是 `/`、无 CR/LF，且等于 `pwd -P` 得到的 canonical physical path”后，才允许构造任何删除目标；若根路径校验失败，则明确拒绝 cleanup，绝不执行 `rm -rf`；
-- cleanup 同样必须独立重新验证 `GITHUB_RUN_ID` 与 `GITHUB_RUN_ATTEMPT` 都是正整数，不能因为前置 prerequisite 曾包含同一检查就继承信任；run identity 无效时不得重建删除路径，也不得执行 `rm -rf`；
-- cleanup 也不依赖 prepare step 已成功发布 `B06_UPSTREAM_DIR`：若环境变量尚不存在，会由 `$RUNNER_TEMP`、`GITHUB_RUN_ID` 和 `GITHUB_RUN_ATTEMPT` 重建本次 run 唯一允许的确定路径；若环境变量已经存在，也必须与这个独立重建的路径逐字相等，否则拒绝执行 `rm -rf`。因此 prepare 阶段提前失败仍可清理本次 scratch object，而损坏、注入额外后缀或包含路径遍历成分的 `B06_UPSTREAM_DIR` 都不能扩大 destructive cleanup 边界；cleanup 同时以 `-e` 与 `-L` 判断目标，删除后同时断言目标既不存在也不是 symbolic link，因此 dangling symlink 也不能绕过清理并跨 run 残留；
-- course checkout 在执行后再次验证 HEAD 与 clean 状态；该 post-execution gate 只有本次 `Checkout course repository` step 成功时才运行。若 checkout 本身失败，失败应保留为 checkout/infrastructure failure，不能在 persistent runner 上继续读取可能属于旧 run 的工作树并生成伪 provenance failure。
+- course checkout 在执行后再次验证 HEAD 与 clean 状态；该 post-execution gate 只有本次 `Checkout course repository` step 成功时才运行。
 
-这里的删除边界必须理解为 **exact-path identity gate**，而不是“路径位于某个 glob/prefix namespace 即可”。合法目标由本次 run 的 `RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT` 唯一决定；prepare 与 cleanup 都只能删除这一对象。特别地，`always()` cleanup 必须自行重新建立对 `RUNNER_TEMP` 根路径和 run identity 两类输入的信任，不能把“前置 prerequisite step 已经检查过”当作 cleanup 的前提，因为该 step 失败正是 cleanup 仍可能被调度执行的路径之一。
+### scratch path 的 identity 与 ownership 必须分开
+
+当前 workflow 对 persistent self-hosted runner 的删除规则采用 fail-closed ownership contract。`RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT` 只能证明“本次 run 期望使用哪个路径”，不能证明该路径上预先存在的对象属于本次 run。
+
+因此 prepare 阶段遵循以下顺序：
+
+```text
+计算本次唯一 expected scratch path
+→ 若该路径已经存在（包括 dangling symlink），立即失败
+→ 不删除任何预先存在的对象
+→ 只有确认路径不存在后，才通过 GITHUB_ENV 发布 B06_UPSTREAM_DIR
+→ 后续 materialization 才在这个已声明 ownership 的路径创建 upstream tree
+```
+
+这意味着 persistent runner 上的 stale object 不再由 B06 自动“预清理”。它会被视为 runner hygiene / ownership blocker，留给 runner 管理者确认来源后处理。这样可以避免仅凭一个可预测路径名删除并非本次 run 创建的目录、挂载点或 symlink。
+
+`always()` cleanup 采用对应的授权规则：
+
+- cleanup 必须独立重新验证 `$RUNNER_TEMP` 的绝对、非根、non-symlink、CR/LF-free、canonical-physical-path 条件，以及 `GITHUB_RUN_ID` / `GITHUB_RUN_ATTEMPT` 的正整数条件；
+- cleanup 独立重建 expected scratch path；
+- **如果 `B06_UPSTREAM_DIR` 没有被 prepare 成功发布，cleanup 不获得删除授权**。它只记录本次 scratch path 未发布，并退出，不会因为“能够重建路径名”就执行 `rm -rf`；
+- 如果 `B06_UPSTREAM_DIR` 已发布，它必须与 independently reconstructed expected path 字节级相等，否则拒绝删除；
+- 只有“prepare 已确认路径原先不存在并发布 ownership”与“cleanup 再次确认 exact path identity”同时成立，才允许 `rm -rf`；
+- 对已经授权的目标，cleanup 同时用 `-e` 与 `-L` 识别普通对象和 dangling symlink，删除后要求两者都不存在。
+
+因此当前删除边界不是 glob/prefix namespace，也不是“可由 run identity 重建即可删除”，而是：**exact-path identity + 本次 run 已成功声明 ownership**。这两个条件缺一不可。
 
 这些 machine gates 只定义“什么样的 run 才是有效证据”，并不等于已经实际运行成功。当前尚未取得匹配 `kernel-course` self-hosted runner 上的 22/22 + 7/7 执行记录，因此 B06 状态不变。
 
