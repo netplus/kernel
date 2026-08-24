@@ -61,22 +61,24 @@ git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 计算本次唯一 expected scratch path
 → 若该路径已经存在（包括 dangling symlink），立即失败
 → 不删除任何预先存在的对象
-→ 只有确认路径不存在后，才通过 GITHUB_ENV 发布 B06_UPSTREAM_DIR
-→ 后续 materialization 才在这个已声明 ownership 的路径创建 upstream tree
+→ mkdir 创建本次 run 的 exact scratch directory
+→ 验证新对象确为 directory 且不是 symbolic link
+→ 只有创建与验证均成功后，才通过 GITHUB_ENV 发布 B06_UPSTREAM_DIR
+→ 后续 materialization 在这个已建立 ownership 的目录中初始化 upstream Git tree
 ```
 
-这意味着 persistent runner 上的 stale object 不再由 B06 自动“预清理”。它会被视为 runner hygiene / ownership blocker，留给 runner 管理者确认来源后处理。这样可以避免仅凭一个可预测路径名删除并非本次 run 创建的目录、挂载点或 symlink。
+这里的 ownership 不再由“路径名已发布”单独建立。prepare 必须先实际创建本次 run 的 scratch directory，并验证创建结果；`B06_UPSTREAM_DIR` 的发布只是把**已经建立的对象 ownership**传播给后续 step。persistent runner 上的 stale object 仍不会被 B06 自动“预清理”，而会作为 runner hygiene / ownership blocker 留给 runner 管理者确认来源后处理。
 
 `always()` cleanup 采用对应的授权规则：
 
 - cleanup 必须独立重新验证 `$RUNNER_TEMP` 的绝对、非根、non-symlink、CR/LF-free、canonical-physical-path 条件，以及 `GITHUB_RUN_ID` / `GITHUB_RUN_ATTEMPT` 的正整数条件；
 - cleanup 独立重建 expected scratch path；
-- **如果 `B06_UPSTREAM_DIR` 没有被 prepare 成功发布，cleanup 不获得删除授权**。它只记录本次 scratch path 未发布，并退出，不会因为“能够重建路径名”就执行 `rm -rf`；
+- **如果 `B06_UPSTREAM_DIR` 没有在 scratch directory 成功创建并验证后发布，cleanup 不获得删除授权**。它只记录本次 scratch path 未发布，并退出，不会因为“能够重建路径名”就执行 `rm -rf`；
 - 如果 `B06_UPSTREAM_DIR` 已发布，它必须与 independently reconstructed expected path 字节级相等，否则拒绝删除；
-- 只有“prepare 已确认路径原先不存在并发布 ownership”与“cleanup 再次确认 exact path identity”同时成立，才允许 `rm -rf`；
+- 只有“prepare 已确认路径原先不存在、创建并验证本次 scratch directory、随后发布 ownership”与“cleanup 再次确认 exact path identity”同时成立，才允许 `rm -rf`；
 - 对已经授权的目标，cleanup 同时用 `-e` 与 `-L` 识别普通对象和 dangling symlink，删除后要求两者都不存在。
 
-因此当前删除边界不是 glob/prefix namespace，也不是“可由 run identity 重建即可删除”，而是：**exact-path identity + 本次 run 已成功声明 ownership**。这两个条件缺一不可。
+因此当前删除边界不是 glob/prefix namespace，也不是“可由 run identity 重建即可删除”，而是：**本次 run 已实际建立 object ownership + exact-path identity**。这两个条件缺一不可。
 
 这些 machine gates 只定义“什么样的 run 才是有效证据”，并不等于已经实际运行成功。当前尚未取得匹配 `kernel-course` self-hosted runner 上的 22/22 + 7/7 执行记录，因此 B06 状态不变。
 
