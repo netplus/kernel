@@ -68,6 +68,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Persistent self-hosted runners may be multi-user. Keep the exact
+          # upstream scratch object private to the runner account even when the
+          # runner's ambient umask is permissive.
+          umask 077
           upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           if [[ -e "$upstream_dir" || -L "$upstream_dir" ]]; then
             printf 'refusing pre-existing B06 scratch path: %q\n' "$upstream_dir" >&2
@@ -81,6 +85,16 @@ jobs:
             printf 'failed to establish owned B06 scratch directory: %q\n' "$upstream_dir" >&2
             exit 1
           fi
+          mode="$(python3 - "$upstream_dir" <<'PY'
+          import os, stat, sys
+          print(oct(stat.S_IMODE(os.stat(sys.argv[1], follow_symlinks=False).st_mode)))
+          PY
+          )"
+          if [[ "$mode" != 0o700 ]]; then
+            printf 'B06 scratch directory must be mode 0700; got %s for %q\n' "$mode" "$upstream_dir" >&2
+            exit 1
+          fi
+          printf 'B06 scratch mode=%s\n' "$mode"
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
       - name: Checkout course repository
