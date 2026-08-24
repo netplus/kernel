@@ -26,6 +26,22 @@ GitHub commit verification: verified / valid
 
 同时核对 `actions/checkout` 官方 releases 页面：`v4.4.0` release 指向短 SHA `11d5960`，与 workflow 固定的完整 SHA 一致。因此 workflow 中的 `# v4.4.0` 注释不是根据第三方示例推断出来的版本标签。
 
+## 仓库内交叉核对
+
+本次维护继续直接读取仓库中的 `.github/workflows/boot-crash-b06-selftest.yml`，确认当前 workflow blob 为：
+
+```text
+965be5c6a483fd5bff368d9cf7a836df5d31b19c
+```
+
+该 blob 中 `Checkout course repository` step 仍精确使用：
+
+```text
+actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+```
+
+因此，本审计核验的 action revision 与当前仓库实际 workflow 输入仍一致，而不是只对应审计创建时的一份旧 workflow。若后续 workflow blob 或 `uses:` revision 发生变化，必须重新核验 action provenance；不能把本记录自动继承给新的依赖 revision。
+
 ## 证据边界
 
 本次核验只建立下面这条事实：
