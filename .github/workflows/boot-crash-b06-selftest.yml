@@ -68,9 +68,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected_upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          upstream_dir="$expected_upstream_dir"
-          rm -rf -- "$upstream_dir"
+          upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ -e "$upstream_dir" || -L "$upstream_dir" ]]; then
+            printf 'refusing pre-existing B06 scratch path: %q\n' "$upstream_dir" >&2
+            exit 1
+          fi
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
 
       - name: Checkout course repository
@@ -178,7 +180,11 @@ jobs:
             exit 1
           fi
           expected_upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          upstream_dir="${B06_UPSTREAM_DIR:-$expected_upstream_dir}"
+          if [[ -z "${B06_UPSTREAM_DIR:-}" ]]; then
+            printf 'B06 scratch path was not published; refusing cleanup of unowned path %q\n' "$expected_upstream_dir" >&2
+            exit 0
+          fi
+          upstream_dir="$B06_UPSTREAM_DIR"
           if [[ "$upstream_dir" != "$expected_upstream_dir" ]]; then
             printf 'refusing unexpected B06 cleanup path: %q (expected %q)\n' "$upstream_dir" "$expected_upstream_dir" >&2
             exit 1
