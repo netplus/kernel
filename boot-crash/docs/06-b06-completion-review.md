@@ -26,7 +26,7 @@ B. upstream Linux v5.10 commit
 
 人工 upstream-v5.10 L1 事实复核已经完成，但不能冒充自动 checker PASS。
 
-## self-hosted workflow 路径状态（2026-08-23）
+## self-hosted workflow 路径状态（2026-08-24）
 
 此前发现的 `$RUNNER_TEMP` + `actions/checkout path` blocker 已经修正。当前 `.github/workflows/boot-crash-b06-selftest.yml` 不再尝试让 `actions/checkout` 在 `$GITHUB_WORKSPACE` 外建立 upstream checkout：course repository 仍由固定 revision 的 `actions/checkout` 取得；upstream Linux v5.10 则在 `$RUNNER_TEMP` 中使用原生 Git materialize：
 
@@ -41,6 +41,7 @@ git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 因此，上一 revision 中“当前 workflow 不能作为已经可执行的 B06 验收入口”的判断已经失效，不能继续作为 blocker。当前 workflow 的设计路径已经恢复为可执行状态，并继续机器验证：
 
 - runner 实际为 Linux/x86-64，Git >= 2.18、Python >= 3.9，且所需外部命令存在；
+- course checkout 固定使用 `actions/checkout@11d5960a326750d5838078e36cf38b85af677262`（官方 v4.4.0 release commit）。该固定 revision 的 `action.yml` 声明 `runs.using: node20`，因此匹配的 self-hosted runner 还必须能够承载 Node 20 Action runtime。固定 Action SHA 与 runtime metadata 已完成 provenance 核验，但真实 runner 的 runtime compatibility 只能由实际 workflow run 建立；若 checkout 因 Action runtime 不兼容失败，应分类为 self-hosted runner / Action runtime prerequisite failure，而不是 fixture 或 Linux v5.10 source-contract failure；
 - `$RUNNER_TEMP` 必须非空、为绝对路径、已经存在为目录、不能是 symbolic link、不能是根目录 `/`，并且字符串中不得包含 CR/LF；此外 workflow 会执行 `cd -- "$RUNNER_TEMP" && pwd -P`，要求得到的 canonical physical path 与 `$RUNNER_TEMP` 字节级相等。这个额外 gate 会拒绝父级 symlink、`.`、`..` 等虽然末级对象本身不是 symlink、但逻辑路径与实际物理删除根不一致的形式。该检查发生在任何 checkout/materialization 之前。因为后续会从该值构造 `B06_UPSTREAM_DIR` 并写入 GitHub environment file，同时在此根目录下执行受限 `rm -rf`，所以不满足任一条件都属于 runner prerequisite failure，而不是 B06 fixture/source-contract failure；拒绝 CR/LF 则保证 `B06_UPSTREAM_DIR=<value>` 的逐行 environment-file 传播不会被路径内容破坏；
 - `GITHUB_RUN_ID` 与 `GITHUB_RUN_ATTEMPT` 必须分别是正整数。二者不是普通日志字段，而是与 `RUNNER_TEMP` 一起构成本次 run 唯一 upstream scratch path 的身份输入；任一值为空、非数字或为零时，必须在 checkout/materialization 前按 runner prerequisite failure 退出；
 - course `HEAD == GITHUB_SHA`，course worktree clean；
