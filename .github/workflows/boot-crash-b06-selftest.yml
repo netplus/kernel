@@ -82,6 +82,14 @@ jobs:
           # before publishing its path to later steps. A path name alone is not
           # evidence that a persistent-runner object belongs to this run.
           mkdir -- "$upstream_dir"
+          published=0
+          cleanup_unpublished_owned_scratch() {
+            if [[ "$published" != 1 && ( -e "$upstream_dir" || -L "$upstream_dir" ) ]]; then
+              printf 'reclaiming unpublished run-owned B06 scratch path: %q\n' "$upstream_dir" >&2
+              rm -rf -- "$upstream_dir"
+            fi
+          }
+          trap cleanup_unpublished_owned_scratch EXIT
           if [[ ! -d "$upstream_dir" || -L "$upstream_dir" ]]; then
             printf 'failed to establish owned B06 scratch directory: %q\n' "$upstream_dir" >&2
             exit 1
@@ -97,6 +105,8 @@ jobs:
           fi
           printf 'B06 scratch mode=%s\n' "$mode"
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
+          published=1
+          trap - EXIT
 
       - name: Checkout course repository
         id: course_checkout
