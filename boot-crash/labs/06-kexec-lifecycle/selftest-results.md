@@ -63,7 +63,7 @@ test_verify_source_contract.py
   f18918cfbe0b01ffba59be3ac083a9971295a2f8
 ```
 
-The fixture now contains **22 unittest cases: 1 complete positive case plus 21 negative regression cases**. The current exact pair has not yet been executed in an environment that can materialize the committed files, so the evidence state is:
+The fixture contains **22 unittest cases: 1 complete positive case plus 21 negative regression cases**. The current exact pair has not yet been executed in an environment that can materialize the committed files, so the evidence state is:
 
 ```text
 current checker source present:                         yes
@@ -82,7 +82,7 @@ Do not copy the historical 9-test result into the current 22-case revision.
 
 ## 4. Current negative-coverage matrix
 
-The 21 negative cases are now sufficient to close the fixture-expansion subtask. They exercise each compound contract at the level where the checker makes an independent assertion:
+The 21 negative cases close the fixture-expansion subtask. They exercise each compound contract at the level where the checker makes an independent assertion:
 
 ```text
 Contract 1: load API vs image purpose
@@ -125,9 +125,7 @@ This matrix is a **checker-regression coverage statement**, not proof that the c
 
 ## 5. Upstream v5.10 source audit
 
-The source facts used by the current checker were re-audited against the upstream `v5.10` tag itself, not against a secondary article or a later kernel version.
-
-The tag resolves to:
+The source facts used by the current checker were re-audited against the upstream `v5.10` tag itself.
 
 ```text
 upstream repository: torvalds/linux
@@ -141,148 +139,94 @@ The four source blobs read for B06 were:
 ```text
 kernel/kexec.c
   c82c6c06f0518f3591de33431904d60175e69bc2
-
 kernel/kexec_file.c
   e21f6b9234f7a2dbcfe17df61d1611b5d3bbb9d7
-
 kernel/kexec_core.c
   8798a8183974e3b3d52ac53dc4b981f4055f0b52
-
 arch/x86/kernel/machine_kexec_64.c
   a29a44a98e5bef10751af769bd198d783e23b9fd
 ```
 
-Repository-API audits have fetched these four paths explicitly at commit `2c85ebc57b3e1817b6ce1a6b703928e113a90442` and reconfirmed the same blob identities. The latest independent audit is recorded in [`upstream-source-audit-2026-08-24.md`](upstream-source-audit-2026-08-24.md); it supersedes the older 2026-08-22 freshness note for current manual-provenance status. This matters because it independently checks that the manual source baseline has not drifted while local Git/DNS access remains unavailable. It is still **source-provenance evidence, not execution evidence**: the connector fetch does not create a local Git worktree on which `verify_source_contract.py` can be executed.
-
-The latest audit reconfirmed the checker model, including the following source facts:
-
-```text
-1. kexec_load and kexec_file_load are distinct load APIs; each has a
-   crash-purpose flag in the v5.10 source.
-2. both load paths select persistent normal/crash image slots and install
-   the prepared image with xchg(); textual slot-selection order differs.
-3. sanity_check_segment_list() constrains KEXEC_TYPE_CRASH segment
-   destinations to the crashk_res range.
-4. kimage_alloc_control_pages() switches on image->type and uses the crash
-   allocator for KEXEC_TYPE_CRASH.
-5. kimage_alloc_init() and kimage_file_alloc_init() allocate swap_page only
-   when !kexec_on_panic.
-6. machine_kexec_prepare(image) occurs in both load paths before persistent
-   installation.
-7. x86-64 machine_kexec_prepare() calls init_pgtable(); init_pgtable() uses
-   kernel_ident_mapping_init() for transition identity mappings, and the
-   source states the point-of-no-return rule immediately before
-   machine_kexec().
-```
-
-This is **manual L1 source revalidation**, not an automated checker PASS.
+The latest independent audit is recorded in [`upstream-source-audit-2026-08-24.md`](upstream-source-audit-2026-08-24.md). It reconfirmed the checker model, including crash-purpose selection, persistent normal/crash slots, `crashk_res` destination constraints, crash-specific control-page allocation, non-crash-only `swap_page`, architecture preparation before persistent installation, and x86-64 transition identity mappings. This remains **manual L1 source revalidation**, not automated checker PASS evidence.
 
 ## 6. Execution-environment blocker and cost boundary
 
-Attempts to materialize the exact files from the current local execution environment have failed at DNS resolution for `github.com` / `raw.githubusercontent.com`. This is an execution-environment blocker, not a checker failure and not a Linux v5.10 source failure. The GitHub connector can read exact repository files (including the upstream files above at a pinned commit) and update course content, but it does not expose those fetched files as a local Git filesystem tree to the acceptance script.
+Attempts to materialize exact Git worktrees in the current execution environment have failed at DNS resolution for GitHub. This is an execution-environment blocker, not a checker failure and not a Linux v5.10 source failure. The repository workflow `.github/workflows/boot-crash-b06-selftest.yml` remains `workflow_dispatch` only and targets `[self-hosted, linux, x64, kernel-course]`; do not silently switch it to a potentially billable GitHub-hosted runner.
 
-The repository workflow `.github/workflows/boot-crash-b06-selftest.yml` is intentionally `workflow_dispatch` only and targets `[self-hosted, linux, x64, kernel-course]`. Do not silently switch it to a potentially billable GitHub-hosted runner. Preferred execution order is an already available local environment, then a dedicated low-privilege self-hosted runner, then another zero-new-cost environment capable of executing exact committed files.
-
-The current workflow is itself part of the acceptance boundary. Before it can establish B06 PASS evidence, it now enforces all of the following:
+The workflow acceptance boundary currently includes:
 
 ```text
 runner prerequisites:
-  actual uname platform must be Linux on x86-64 (x86_64/amd64)
-  Git >= 2.18
-  Python >= 3.9
-  git, python3, uname, grep, tee, mktemp, rm and pwd must all be available
-  RUNNER_TEMP must be non-empty, absolute, an existing non-symlink directory,
-    not '/', contain neither CR nor LF, and equal the canonical physical path
-    returned by `cd -- "$RUNNER_TEMP" && pwd -P`
-  GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must each be positive decimal integers
-  prerequisite failures occur before checkout/test evidence is produced
-
-checkout Action runtime prerequisite:
-  course checkout is pinned to
-    actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-  the pinned revision's action.yml declares `runs.using: node20`
-  the pinned SHA/release/runtime metadata is independently audited in
-    workflow-dependency-audit-2026-08-24.md
-  the actual kernel-course self-hosted runner's ability to launch that Node 20
-    Action runtime is not established until a real workflow run reaches and
-    successfully executes the checkout step
-  a checkout failure caused by Action runtime incompatibility is classified as
-    a self-hosted runner / Action runtime prerequisite failure, not a fixture
-    failure and not a Linux v5.10 source-contract failure
-
-run identity and serialization:
-  workflow_dispatch establishes the selected GITHUB_SHA
-  GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT identify the unique scratch object for
-    this workflow attempt; empty, non-numeric, or zero values are rejected
-  checked-out course HEAD must equal that GITHUB_SHA
-  concurrency group boot-crash-b06-selftest serializes evidence-producing runs
-  cancel-in-progress is false, so a queued manual run does not cancel an
-    already-running validation
+  Linux x86-64; Git >= 2.18; Python >= 3.9
+  required shell tools present
+  RUNNER_TEMP is a non-root, existing, absolute, non-symlink, CR/LF-free,
+    canonical physical directory path
+  GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT are positive decimal integers
 
 course provenance:
-  clean course checkout
-  checker committed blob == 5c89b67628cf55560089656d5b65e80ff74c556f
-  fixture committed blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
-  worktree blobs == committed blobs
-  post-execution HEAD/clean checks run only if this run's course checkout
-  succeeded, so a checkout failure cannot inspect a stale persistent worktree
+  checkout Action pinned to a full SHA
+  checked-out HEAD == GITHUB_SHA and worktree clean
+  checker blob == 5c89b67628cf55560089656d5b65e80ff74c556f
+  fixture blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
 
 fixture evidence:
-  unittest command exits successfully
+  unittest exits successfully
   output states exactly "Ran 22 tests ..."
-  output contains a standalone "OK"
+  output contains standalone "OK"
 
-upstream provenance:
-  torvalds/linux is materialized with native Git under RUNNER_TEMP, not as a
-  nested course checkout
-  checkout is pinned to 2c85ebc57b3e1817b6ce1a6b703928e113a90442
-  git rev-parse HEAD must equal that commit before and after checker execution
-  upstream worktree must be clean before and after checker execution
-
-upstream L1 evidence:
-  checker exits successfully
-  exactly seven PASS group lines are present
-  PASS groups 1 through 7 are each present
-  final summary is "PASS: 7 B06 Linux v5.10 source-contract groups"
-
-persistent-runner hygiene:
-  checkout credentials are not persisted
-  checkout does not add safe.directory entries to global Git config
-  the only removable upstream scratch object is the exact path reconstructed
-    from RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT:
-    $RUNNER_TEMP/kernel-course-b06-linux-v5.10-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT
-  prepare removes only that exact path before publishing B06_UPSTREAM_DIR
-  cleanup is an always() failure-path step and therefore revalidates RUNNER_TEMP
-    independently instead of assuming the earlier prerequisite step succeeded;
-    RUNNER_TEMP must again be non-empty, absolute, an existing non-symlink
-    directory, not '/', contain neither CR nor LF, and equal its canonical
-    physical path from `cd -- "$RUNNER_TEMP" && pwd -P`; otherwise cleanup
-    refuses every rm -rf operation
-  cleanup also independently revalidates GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT
-    as positive decimal integers before reconstructing any removable path; a
-    failed prerequisite step is not evidence that the run identity is safe
-  cleanup independently reconstructs the same exact path; if a published
-    B06_UPSTREAM_DIR differs byte-for-byte, cleanup refuses rm -rf
-  cleanup can reconstruct the exact path even when preparation failed before
-    B06_UPSTREAM_DIR was published
-  cleanup treats both existing paths and symbolic links (-e or -L) as removable
-    inputs, then asserts that neither a path nor a dangling symlink remains
-  temporary upstream checkout is removed on success or failure
-  final course HEAD must still equal GITHUB_SHA and its worktree must be clean
+upstream provenance and evidence:
+  exact upstream commit 2c85ebc57b3e1817b6ce1a6b703928e113a90442
+  clean upstream worktree before and after checker
+  exactly seven PASS group lines and final 7-group PASS summary
 ```
 
-The canonical-physical-path condition is stronger than checking only `! -L "$RUNNER_TEMP"`: it also rejects a scratch root reached through a symlinked parent, or a logical path containing `.`/`..` whose byte string differs from the filesystem's physical canonical path. This keeps the path used to authorize destructive cleanup identical to the directory the filesystem actually resolves. The CR/LF restriction is also part of the execution contract because `B06_UPSTREAM_DIR=<value>` is propagated through GitHub's line-oriented environment file; a newline-bearing root would corrupt that cross-step representation.
+### Persistent-runner scratch ownership contract
 
-The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix. Because cleanup runs under `always()`, its destructive-root and run-identity validation are deliberately repeated inside the cleanup step: a failed prerequisite check must never be treated as proof that `RUNNER_TEMP`, `GITHUB_RUN_ID`, or `GITHUB_RUN_ATTEMPT` is safe for deletion.
+Path identity and object ownership are separate conditions. A path that can be reconstructed from run identity is **not** automatically owned by the current run.
 
-The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. That fixed revision declares a Node 20 Action runtime; the dependency audit establishes the metadata identity, while only a real run can establish compatibility with the selected self-hosted runner. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, a specific workflow run attempt, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
+The current workflow therefore uses this fail-closed contract:
+
+```text
+1. Prepare computes exactly:
+   $RUNNER_TEMP/kernel-course-b06-linux-v5.10-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT
+
+2. If that exact path already exists, including as a dangling symbolic link,
+   prepare fails immediately and does not delete it.
+   A pre-existing object is a runner-hygiene/ownership blocker, not evidence
+   that the current run may reclaim it.
+
+3. Only after prepare has confirmed that the path is absent does it publish
+   B06_UPSTREAM_DIR through GITHUB_ENV. Publication is the workflow's
+   ownership declaration for this run-specific scratch name.
+
+4. The always() cleanup step independently revalidates RUNNER_TEMP and run
+   identity, then reconstructs the same exact expected path.
+
+5. If B06_UPSTREAM_DIR was never published, cleanup has no ownership evidence
+   and refuses deletion, even though it can reconstruct the expected name.
+
+6. If B06_UPSTREAM_DIR was published but differs byte-for-byte from the
+   independently reconstructed path, cleanup refuses deletion.
+
+7. Only published ownership plus exact-path identity authorizes rm -rf.
+   After deletion, cleanup asserts that neither a path nor dangling symlink
+   remains.
+```
+
+This supersedes the older evidence wording that said prepare removed a pre-existing exact path or that cleanup could reconstruct and delete the path when `B06_UPSTREAM_DIR` had never been published. Those statements no longer describe the workflow and must not be used as its safety model.
+
+The canonical-physical-path condition remains stronger than checking only `! -L "$RUNNER_TEMP"`: it also rejects a scratch root reached through a symlinked parent or a logical path containing `.`/`..` whose byte string differs from the filesystem's physical canonical path. Because cleanup runs under `always()`, destructive-root and run-identity validation are repeated inside cleanup rather than inherited from an earlier step.
+
+The pinned checkout revision declares a Node 20 Action runtime. The dependency audit establishes that metadata identity; only a real workflow run can establish compatibility with the selected self-hosted runner. A runtime incompatibility is a runner prerequisite failure, not fixture or Linux v5.10 source-contract failure.
+
+These controls do **not** constitute execution evidence by themselves. Until a real run produces the required outputs, current 22/22 and upstream 7/7 PASS remain unestablished.
 
 ## 7. Next acceptance action
 
-Fixture coverage review is now closed. The next minimum acceptance unit is execution, not more synthetic cases:
+Fixture coverage review is closed. The next minimum acceptance unit is execution:
 
 ```text
-A. materialize the exact current blobs above;
+A. materialize the exact current checker/fixture blobs;
 B. run python3 -m unittest -v test_verify_source_contract.py;
    require 22 tests, OK, exit code 0;
 C. run the same verify_source_contract.py against upstream Linux v5.10
