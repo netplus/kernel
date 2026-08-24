@@ -197,6 +197,19 @@ runner prerequisites:
   GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must each be positive decimal integers
   prerequisite failures occur before checkout/test evidence is produced
 
+checkout Action runtime prerequisite:
+  course checkout is pinned to
+    actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+  the pinned revision's action.yml declares `runs.using: node20`
+  the pinned SHA/release/runtime metadata is independently audited in
+    workflow-dependency-audit-2026-08-24.md
+  the actual kernel-course self-hosted runner's ability to launch that Node 20
+    Action runtime is not established until a real workflow run reaches and
+    successfully executes the checkout step
+  a checkout failure caused by Action runtime incompatibility is classified as
+    a self-hosted runner / Action runtime prerequisite failure, not a fixture
+    failure and not a Linux v5.10 source-contract failure
+
 run identity and serialization:
   workflow_dispatch establishes the selected GITHUB_SHA
   GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT identify the unique scratch object for
@@ -204,7 +217,7 @@ run identity and serialization:
   checked-out course HEAD must equal that GITHUB_SHA
   concurrency group boot-crash-b06-selftest serializes evidence-producing runs
   cancel-in-progress is false, so a queued manual run does not cancel an
-  already-running validation
+    already-running validation
 
 course provenance:
   clean course checkout
@@ -262,7 +275,7 @@ The canonical-physical-path condition is stronger than checking only `! -L "$RUN
 
 The cleanup rule above is an **exact-path identity gate**, not a glob/prefix namespace check. A damaged value with an injected suffix or path-traversal component is not authorized merely because its string begins with the B06 scratch prefix. Because cleanup runs under `always()`, its destructive-root and run-identity validation are deliberately repeated inside the cleanup step: a failed prerequisite check must never be treated as proof that `RUNNER_TEMP`, `GITHUB_RUN_ID`, or `GITHUB_RUN_ATTEMPT` is safe for deletion.
 
-The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, a specific workflow run attempt, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
+The workflow uses a full-SHA-pinned `actions/checkout` revision rather than a mutable major-version tag. That fixed revision declares a Node 20 Action runtime; the dependency audit establishes the metadata identity, while only a real run can establish compatibility with the selected self-hosted runner. These controls make a future workflow PASS attributable to a specific dispatch-selected course commit, the actual checked-out course commit, a specific checker/fixture pair, a specific workflow run attempt, and a specific upstream Linux source revision. They **do not constitute execution evidence by themselves**; until a real run produces the required outputs, the current 22/22 and upstream 7/7 states remain unestablished.
 
 ## 7. Next acceptance action
 
