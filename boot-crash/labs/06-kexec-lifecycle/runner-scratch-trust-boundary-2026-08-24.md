@@ -30,9 +30,37 @@ workflow-enforced controls:
 
 `0700` must not be described as making the workflow safe on an otherwise untrusted shared host. It is a defense-in-depth local-permission control inside a runner that is already assumed to be administratively trusted and isolated.
 
+### Wording audit of the current workflow
+
+The current `Prepare isolated upstream workspace` comment says that persistent self-hosted runners "may be multi-user" and then explains `umask 077` as keeping the scratch object private to the runner account. Read without the deployment assumption above, that wording is too broad: it can be mistaken for a claim that mode `0700` makes this job safe on an arbitrary shared host.
+
+For B06 evidence purposes, that comment must be interpreted narrowly: `0700` protects the child directory contents from ordinary access by other local accounts **after** the runner deployment has already guaranteed that untrusted principals cannot mutate the `RUNNER_TEMP` parent namespace. A future workflow edit should replace the broad "may be multi-user" wording with this trusted-runner assumption rather than treating child mode bits as the whole isolation boundary.
+
+This wording issue does not weaken the existing fail-closed deletion gates, but it matters for how a self-hosted runner is provisioned and reviewed. It is therefore classified as a runner deployment/evidence-contract issue, not as a Linux v5.10 source-contract issue.
+
 ## Consequence for runner setup
 
 When a `kernel-course` self-hosted runner is provisioned, use a dedicated runner VM/guest or equivalently isolated host account and a runner-owned temporary namespace. Do not place this job on a general-purpose shared shell host where unrelated users can modify the runner's temporary parent directory.
+
+Before treating a real B06 run as acceptance evidence, the runner deployment should satisfy all of the following:
+
+```text
+runner instance:
+  dedicated to trusted kernel-course jobs, or equivalently isolated;
+
+runner account:
+  not shared with untrusted interactive workloads;
+
+RUNNER_TEMP namespace:
+  controlled by the runner deployment;
+  not mutable by untrusted local principals during the job;
+
+workflow scratch child:
+  created by this run only;
+  validated as a non-symlink directory;
+  validated as mode 0700 before publication;
+  removed only after published ownership and exact-path identity agree.
+```
 
 This is consistent with the course's cost boundary: a self-hosted runner is preferred over silently switching to a potentially billable GitHub-hosted runner, but self-hosting also makes host isolation and lifecycle cleanup part of the acceptance environment.
 
