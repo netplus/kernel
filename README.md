@@ -58,6 +58,7 @@ assembly
 - [`network/docs/nftables/00-learning-plan.md`](network/docs/nftables/00-learning-plan.md)：NF00～NF13 学习计划；
 - [`network/docs/nftables/01-ruleset-evaluation-and-control-flow.md`](network/docs/nftables/01-ruleset-evaluation-and-control-flow.md)：已学 ruleset evaluator 与控制流；
 - [`network/docs/nftables/02-counter-log-and-rule-operations.md`](network/docs/nftables/02-counter-log-and-rule-operations.md)：已学 counter/log/handle；
+- [`network/docs/nftables/03-kbuild-and-protocol-families.md`](network/docs/nftables/03-kbuild-and-protocol-families.md)：已学 kbuild/Kconfig 与协议族注册；
 - [`network/source-paths/nftables-v6.12.md`](network/source-paths/nftables-v6.12.md)：Linux v6.12 源码闭环；
 - [`network/labs/nftables/01-counter-log/README.md`](network/labs/nftables/01-counter-log/README.md)：counter/log 最小实验。
 
@@ -67,13 +68,14 @@ assembly
 ruleset evaluation                 已完成
 jump/goto/return/verdict           已完成
 counter/log/handle                 已完成
+kbuild/Kconfig/协议族注册           已完成
 nft monitor trace                  下一课
 Netfilter hooks + packet path      待学习
 conntrack/NAT                      待学习
 sets/maps/verdict maps             待学习
 mark + policy routing              待学习
 route chain                        待学习
-families/stateful objects          待学习
+families 语义与 hook 位置           待学习
 flowtable                          待学习
 v6.12 evaluator 深入               持续推进
 ```

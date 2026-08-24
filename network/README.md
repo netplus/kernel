@@ -65,7 +65,8 @@ NF06  NAT 与 conntrack binding
 NF07  sets/maps/verdict maps/concatenation
 NF08  meta mark、ct mark、RPDB 与 policy routing
 NF09  route chain 与 OUTPUT reroute
-NF10  address families：ip/ip6/inet/bridge/netdev
+NF10a kbuild、Kconfig 与协议族注册                     已完成
+NF10b address families：ip/ip6/inet/bridge/netdev
 NF11  limit/quota/meter/dynamic set 等 stateful object
 NF12  flowtable 与 fast path
 NF13  Linux v6.12 nf_tables evaluator 源码深入

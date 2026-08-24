@@ -329,6 +329,9 @@ base-chain policy
 counter
 log
 trace evaluator 入口
+kbuild 复合模块机制
+Kconfig 选项与协议族注册
+INET broker 模式
 ```
 
 待后续课程继续核验：
@@ -343,3 +346,120 @@ route chain reroute
 sets/maps backend
 flowtable
 ```
+
+## 13. kbuild 与 Kconfig 源码入口
+
+本文补充 kbuild 和 Kconfig 相关的源码路径，对应课程 03-kbuild-and-protocol-families.md。
+
+### `net/netfilter/Makefile`
+
+已核验：
+
+- `nf_tables-objs := ...` 定义基础对象列表（约 20 个 .o 文件）；
+- `ifdef CONFIG_X86_64` / `ifndef CONFIG_UML` 条件追加 `nft_set_pipapo_avx2.o`；
+- `ifdef CONFIG_NFT_CT` / `ifdef CONFIG_MITIGATION_RETPOLINE` 条件追加 `nft_ct_fast.o`；
+- `obj-$(CONFIG_NF_TABLES) += nf_tables.o` 触发构建。
+
+kbuild 规则：当 `obj-y`/`obj-m` 中出现 `foo.o` 且存在 `foo-objs` 时，将 `foo-objs` 列表中的所有 .o 链接成 `foo.o`。
+
+### `net/netfilter/Kconfig`
+
+已核验：
+
+```kconfig
+config NF_TABLES
+	select NETFILTER_NETLINK
+	select LIBCRC32C
+	tristate "Netfilter nf_tables support"
+
+config NF_TABLES_INET
+	depends on IPV6
+	select NF_TABLES_IPV4
+	select NF_TABLES_IPV6
+	bool "Netfilter nf_tables mixed IPv4/IPv6 tables support"
+
+config NF_TABLES_NETDEV
+	bool "Netfilter nf_tables netdev tables support"
+```
+
+- `NF_TABLES` 是 `tristate`，默认 `n`（无 `default` 语句）；
+- `NF_TABLES_INET` 是 `bool`，`select` 自动启用 IPV4 和 IPV6；
+- `NF_TABLES_NETDEV` 是 `bool`。
+
+### `net/ipv4/netfilter/Kconfig`
+
+已核验：
+
+```kconfig
+config NF_TABLES_IPV4
+	bool "IPv4 nf_tables support"
+
+config NF_TABLES_ARP
+	bool "ARP nf_tables support"
+	select NETFILTER_FAMILY_ARP
+```
+
+### `net/ipv6/netfilter/Kconfig`
+
+已核验：
+
+```kconfig
+config NF_TABLES_IPV6
+	bool "IPv6 nf_tables support"
+```
+
+### `net/bridge/netfilter/Kconfig`
+
+已核验：
+
+```kconfig
+menuconfig NF_TABLES_BRIDGE
+	depends on BRIDGE && NETFILTER && NF_TABLES
+	select NETFILTER_FAMILY_BRIDGE
+	tristate "Ethernet Bridge nf_tables support"
+```
+
+`NF_TABLES_BRIDGE` 是唯一的 `tristate` 协议族选项，生成独立模块 `nf_tables_bridge.ko`。
+
+### `include/uapi/linux/netfilter.h`
+
+已核验：
+
+```c
+enum {
+	NFPROTO_UNSPEC =  0,
+	NFPROTO_INET   =  1,
+	NFPROTO_IPV4   =  2,
+	NFPROTO_ARP    =  3,
+	NFPROTO_NETDEV =  5,
+	NFPROTO_BRIDGE =  7,
+	NFPROTO_IPV6   = 10,
+};
+```
+
+`NFPROTO_INET` 是独立的协议族编号，不是 `NFPROTO_IPV4 + NFPROTO_IPV6` 的组合。
+
+### `net/netfilter/nft_chain_filter.c`
+
+已核验：
+
+- `nft_chain_filter_ipv4`：`.family = NFPROTO_IPV4`，无 INGRESS hook；
+- `nft_chain_filter_ipv6`：`.family = NFPROTO_IPV6`，无 INGRESS hook；
+- `nft_chain_filter_inet`：`.family = NFPROTO_INET`，有 INGRESS hook，入口函数 `nft_do_chain_inet()` 根据 `state->pf` 动态选择 IPv4 或 IPv6 pktinfo 解析。
+
+### `net/netfilter/nft_fib_inet.c`
+
+已核验：
+
+- `nft_fib_inet_eval()` 使用 `switch (nft_pf(pkt))` 分发到 `nft_fib4_eval` 或 `nft_fib6_eval`；
+- 注册为 `.family = NFPROTO_INET`；
+- 只在 INET 表中可用。
+
+### `net/netfilter/nft_reject_inet.c`
+
+已核验：
+
+- `nft_reject_inet_eval()` 使用 `switch (nft_pf(pkt))` 分发到 IPv4 或 IPv6 的 reject 实现；
+- IPv4 使用 `nf_send_unreach`/`nf_send_reset`，IPv6 使用 `nf_send_unreach6`/`nf_send_reset6`；
+- 注册为 `.family = NFPROTO_INET`；
+- 只在 INET 表中可用。

@@ -153,7 +153,21 @@ SO_MARK
 
 ## 阶段 6：families 与更深层 datapath
 
-### NF10：address families
+### NF10a：kbuild、Kconfig 与协议族注册
+
+掌握：
+
+- kbuild 复合模块机制：`nf_tables-objs` 与 `nf_tables.o` 的关系；
+- `CONFIG_NF_TABLES` 核心选项与默认值；
+- 协议族选项：`NF_TABLES_IPV4/IPV6/ARP/INET/BRIDGE/NETDEV`；
+- bool 与 tristate 的区别，以及为什么只有 BRIDGE 是独立模块；
+- 协议族编号：`NFPROTO_IPV4=2`, `NFPROTO_IPV6=10`, `NFPROTO_INET=1`；
+- INET 的特殊性：独立协议族、专属 INGRESS hook、broker 模式；
+- INET 独有模块：`nft_fib_inet`、`nft_reject_inet` 的运行时协议分发。
+
+材料：[`03-kbuild-and-protocol-families.md`](03-kbuild-and-protocol-families.md)
+
+### NF10b：address families 语义与 hook 位置
 
 系统比较：
 
@@ -167,6 +181,11 @@ netdev
 ```
 
 需要结合实际 hook 位置，而不是只背 family 名称。
+
+- 各 family 可用的 hook 位置；
+- 同一 hook 在不同 family 中的语义差异；
+- `nft list tables` 输出与实际内核注册的关系；
+- 为什么 INET 表能同时处理 IPv4 和 IPv6 流量。
 
 ### NF11：stateful objects
 
