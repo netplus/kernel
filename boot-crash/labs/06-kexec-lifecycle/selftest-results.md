@@ -158,7 +158,7 @@ The workflow acceptance boundary currently includes:
 ```text
 runner prerequisites:
   Linux x86-64; Git >= 2.18; Python >= 3.9
-  required shell tools present
+  required shell tools present, including mkdir for owned scratch creation
   RUNNER_TEMP is a non-root, existing, absolute, non-symlink, CR/LF-free,
     canonical physical directory path
   GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT are positive decimal integers
@@ -182,7 +182,7 @@ upstream provenance and evidence:
 
 ### Persistent-runner scratch ownership contract
 
-Path identity and object ownership are separate conditions. A path that can be reconstructed from run identity is **not** automatically owned by the current run.
+Path identity and object ownership are separate conditions. A path that can be reconstructed from run identity is **not** automatically owned by the current run, and publishing a path name is not by itself sufficient to establish ownership of a filesystem object.
 
 The current workflow therefore uses this fail-closed contract:
 
@@ -195,25 +195,30 @@ The current workflow therefore uses this fail-closed contract:
    A pre-existing object is a runner-hygiene/ownership blocker, not evidence
    that the current run may reclaim it.
 
-3. Only after prepare has confirmed that the path is absent does it publish
-   B06_UPSTREAM_DIR through GITHUB_ENV. Publication is the workflow's
-   ownership declaration for this run-specific scratch name.
+3. After confirming absence, prepare creates the exact directory with mkdir.
+   It then verifies that the new object is a directory and not a symbolic link.
 
-4. The always() cleanup step independently revalidates RUNNER_TEMP and run
+4. Only after successful creation and validation does prepare publish
+   B06_UPSTREAM_DIR through GITHUB_ENV. Publication propagates ownership of
+   the object that this run has already created; it does not create ownership
+   merely by naming a path.
+
+5. The always() cleanup step independently revalidates RUNNER_TEMP and run
    identity, then reconstructs the same exact expected path.
 
-5. If B06_UPSTREAM_DIR was never published, cleanup has no ownership evidence
-   and refuses deletion, even though it can reconstruct the expected name.
+6. If B06_UPSTREAM_DIR was never published, cleanup has no completed ownership
+   evidence and refuses deletion, even though it can reconstruct the expected
+   name. This also covers prepare failures before or during mkdir/validation.
 
-6. If B06_UPSTREAM_DIR was published but differs byte-for-byte from the
+7. If B06_UPSTREAM_DIR was published but differs byte-for-byte from the
    independently reconstructed path, cleanup refuses deletion.
 
-7. Only published ownership plus exact-path identity authorizes rm -rf.
-   After deletion, cleanup asserts that neither a path nor dangling symlink
-   remains.
+8. Only established object ownership plus published propagation plus
+   exact-path identity authorizes rm -rf. After deletion, cleanup asserts that
+   neither a path nor dangling symlink remains.
 ```
 
-This supersedes the older evidence wording that said prepare removed a pre-existing exact path or that cleanup could reconstruct and delete the path when `B06_UPSTREAM_DIR` had never been published. Those statements no longer describe the workflow and must not be used as its safety model.
+This supersedes the older evidence wording that treated publication immediately after an absence check as ownership establishment. The current contract is stronger: **create → validate → publish**. It also continues to supersede still older wording that allowed prepare to remove a pre-existing exact path or cleanup to delete an unpublished path merely because the run identity could reconstruct its name.
 
 The canonical-physical-path condition remains stronger than checking only `! -L "$RUNNER_TEMP"`: it also rejects a scratch root reached through a symlinked parent or a logical path containing `.`/`..` whose byte string differs from the filesystem's physical canonical path. Because cleanup runs under `always()`, destructive-root and run-identity validation are repeated inside cleanup rather than inherited from an earlier step.
 
