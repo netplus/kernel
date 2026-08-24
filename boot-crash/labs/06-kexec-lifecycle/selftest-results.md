@@ -198,39 +198,46 @@ The current workflow therefore uses this fail-closed contract:
    that the current run may reclaim it.
 
 3. After confirming absence, prepare sets umask 077 and creates the exact
-   directory with mkdir. It then verifies that the new object is a directory
-   and not a symbolic link.
+   directory with mkdir. It then immediately installs a prepare-local EXIT
+   trap. That trap is authorized by this shell's successful mkdir: it may
+   reclaim only this just-created exact object while publication is incomplete.
 
-4. Prepare reads the new object's mode with Python
-   os.stat(..., follow_symlinks=False) + stat.S_IMODE() and requires exactly
-   0700. This keeps the scratch tree private to the runner account within the
-   trusted parent namespace even when the runner process inherited a permissive
-   ambient umask. The Python check avoids depending on platform-specific
-   stat(1) output syntax.
+4. Prepare verifies that the new object is a directory and not a symbolic link,
+   then reads its mode with Python os.stat(..., follow_symlinks=False) +
+   stat.S_IMODE() and requires exactly 0700. This keeps the scratch tree private
+   to the runner account within the trusted parent namespace even when the
+   runner process inherited a permissive ambient umask. The Python check avoids
+   depending on platform-specific stat(1) output syntax.
 
-5. Only after successful creation, object-type validation, and mode-0700
+5. If object-type validation, mode validation, or publication fails after the
+   successful mkdir, the prepare-local EXIT trap reclaims the unpublished
+   run-owned object. This is not ownership inferred from the path name: the
+   same shell directly established ownership by creating the object after an
+   absence check.
+
+6. Only after successful creation, object-type validation, and mode-0700
    validation does prepare publish B06_UPSTREAM_DIR through GITHUB_ENV.
    Publication propagates ownership of the object that this run has already
    created and validated; it does not create ownership merely by naming a path.
+   After successful publication, prepare marks the object published and removes
+   its local EXIT trap.
 
-6. The always() cleanup step independently revalidates RUNNER_TEMP and run
-   identity, then reconstructs the same exact expected path.
-
-7. If B06_UPSTREAM_DIR was never published, cleanup has no completed ownership
-   evidence and refuses deletion, even though it can reconstruct the expected
-   name. This also covers prepare failures before or during mkdir/type/mode
-   validation.
+7. The final always() cleanup step independently revalidates RUNNER_TEMP and run
+   identity, then reconstructs the same exact expected path. If
+   B06_UPSTREAM_DIR was never published, this later step has no cross-step
+   ownership evidence and refuses deletion even though it can reconstruct the
+   expected name. It must not infer ownership from path predictability.
 
 8. If B06_UPSTREAM_DIR was published but differs byte-for-byte from the
-   independently reconstructed path, cleanup refuses deletion.
+   independently reconstructed path, final cleanup refuses deletion.
 
 9. Only a trusted/isolated RUNNER_TEMP namespace plus established object
    ownership, verified private mode, published propagation, and exact-path
-   identity authorizes rm -rf. After deletion, cleanup asserts that neither a
-   path nor dangling symlink remains.
+   identity authorizes the final rm -rf. After deletion, final cleanup asserts
+   that neither a path nor dangling symlink remains.
 ```
 
-This supersedes the older evidence wording that treated publication immediately after an absence check as ownership establishment. The current contract is stronger: **trusted/isolated parent namespace + `umask 077` → create → validate object type → validate mode `0700` → publish → exact-path cleanup identity**. It also continues to supersede still older wording that allowed prepare to remove a pre-existing exact path or cleanup to delete an unpublished path merely because the run identity could reconstruct its name.
+This supersedes the older evidence wording that treated every unpublished-object failure as something only the final `always()` cleanup could consider. The current contract distinguishes two ownership scopes: **prepare-local direct ownership** exists immediately after that shell successfully creates the object and safely authorizes its local trap to reclaim an unpublished object; **cross-step ownership evidence** exists only after successful `B06_UPSTREAM_DIR` publication and is required by the later `always()` cleanup. Pre-existing/unowned objects remain fail-closed and are never reclaimed by either path.
 
 The canonical-physical-path condition remains stronger than checking only `! -L "$RUNNER_TEMP"`: it also rejects a scratch root reached through a symlinked parent or a logical path containing `.`/`..` whose byte string differs from the filesystem's physical canonical path. Because cleanup runs under `always()`, destructive-root and run-identity validation are repeated inside cleanup rather than inherited from an earlier step.
 
