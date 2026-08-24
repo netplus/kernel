@@ -68,9 +68,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Persistent self-hosted runners may be multi-user. Keep the exact
-          # upstream scratch object private to the runner account even when the
-          # runner's ambient umask is permissive.
+          # This job assumes a trusted, isolated self-hosted runner whose
+          # RUNNER_TEMP namespace cannot be mutated by untrusted local users.
+          # Keep this run-owned scratch child private to the runner account as
+          # defense in depth even when the runner's ambient umask is permissive.
           umask 077
           upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           if [[ -e "$upstream_dir" || -L "$upstream_dir" ]]; then
