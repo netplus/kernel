@@ -51,9 +51,9 @@ git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 - checker 必须恰好得到 `PASS 1..7` 和最终 7-group summary；
 - course checkout 在执行后再次验证 HEAD 与 clean 状态；该 post-execution gate 只有本次 `Checkout course repository` step 成功时才运行。
 
-### scratch path 的 identity 与 ownership 必须分开
+### scratch path 的 identity、ownership 与本机权限必须分开
 
-当前 workflow 对 persistent self-hosted runner 的删除规则采用 fail-closed ownership contract。`RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT` 只能证明“本次 run 期望使用哪个路径”，不能证明该路径上预先存在的对象属于本次 run。
+当前 workflow 对 persistent self-hosted runner 的删除规则采用 fail-closed ownership contract。`RUNNER_TEMP + GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT` 只能证明“本次 run 期望使用哪个路径”，不能证明该路径上预先存在的对象属于本次 run；同样，已经由本次 run 创建对象也不自动意味着其本机访问权限足够收敛。
 
 因此 prepare 阶段遵循以下顺序：
 
@@ -61,24 +61,27 @@ git -C "$B06_UPSTREAM_DIR" checkout --detach FETCH_HEAD
 计算本次唯一 expected scratch path
 → 若该路径已经存在（包括 dangling symlink），立即失败
 → 不删除任何预先存在的对象
+→ 设置 umask 077
 → mkdir 创建本次 run 的 exact scratch directory
 → 验证新对象确为 directory 且不是 symbolic link
-→ 只有创建与验证均成功后，才通过 GITHUB_ENV 发布 B06_UPSTREAM_DIR
-→ 后续 materialization 在这个已建立 ownership 的目录中初始化 upstream Git tree
+→ 使用 Python os.stat(..., follow_symlinks=False) + stat.S_IMODE()
+  验证新目录 mode 精确为 0700
+→ 只有创建、对象类型与 mode 验证均成功后，才通过 GITHUB_ENV 发布 B06_UPSTREAM_DIR
+→ 后续 materialization 在这个已建立 ownership 且权限收敛的目录中初始化 upstream Git tree
 ```
 
-这里的 ownership 不再由“路径名已发布”单独建立。prepare 必须先实际创建本次 run 的 scratch directory，并验证创建结果；`B06_UPSTREAM_DIR` 的发布只是把**已经建立的对象 ownership**传播给后续 step。persistent runner 上的 stale object 仍不会被 B06 自动“预清理”，而会作为 runner hygiene / ownership blocker 留给 runner 管理者确认来源后处理。
+这里的 ownership 不再由“路径名已发布”单独建立。prepare 必须先实际创建本次 run 的 scratch directory，并验证创建结果；`B06_UPSTREAM_DIR` 的发布只是把**已经建立的对象 ownership**传播给后续 step。`umask 077` 与随后对 `0700` 的显式验证则把本次 upstream scratch tree 的本机访问权限限制在 runner account；不能只依赖 self-hosted runner 宿主进程可能变化的 ambient umask。使用 Python 检查 mode 是为了直接核对 POSIX mode bits，而不依赖不同平台 `stat(1)` 命令行格式。persistent runner 上的 stale object 仍不会被 B06 自动“预清理”，而会作为 runner hygiene / ownership blocker 留给 runner 管理者确认来源后处理。
 
 `always()` cleanup 采用对应的授权规则：
 
 - cleanup 必须独立重新验证 `$RUNNER_TEMP` 的绝对、非根、non-symlink、CR/LF-free、canonical-physical-path 条件，以及 `GITHUB_RUN_ID` / `GITHUB_RUN_ATTEMPT` 的正整数条件；
 - cleanup 独立重建 expected scratch path；
-- **如果 `B06_UPSTREAM_DIR` 没有在 scratch directory 成功创建并验证后发布，cleanup 不获得删除授权**。它只记录本次 scratch path 未发布，并退出，不会因为“能够重建路径名”就执行 `rm -rf`；
+- **如果 `B06_UPSTREAM_DIR` 没有在 scratch directory 成功创建、类型验证和 mode `0700` 验证后发布，cleanup 不获得删除授权**。它只记录本次 scratch path 未发布，并退出，不会因为“能够重建路径名”就执行 `rm -rf`；
 - 如果 `B06_UPSTREAM_DIR` 已发布，它必须与 independently reconstructed expected path 字节级相等，否则拒绝删除；
-- 只有“prepare 已确认路径原先不存在、创建并验证本次 scratch directory、随后发布 ownership”与“cleanup 再次确认 exact path identity”同时成立，才允许 `rm -rf`；
+- 只有“prepare 已确认路径原先不存在、以 `umask 077` 创建并验证本次 `0700` scratch directory、随后发布 ownership”与“cleanup 再次确认 exact path identity”同时成立，才允许 `rm -rf`；
 - 对已经授权的目标，cleanup 同时用 `-e` 与 `-L` 识别普通对象和 dangling symlink，删除后要求两者都不存在。
 
-因此当前删除边界不是 glob/prefix namespace，也不是“可由 run identity 重建即可删除”，而是：**本次 run 已实际建立 object ownership + exact-path identity**。这两个条件缺一不可。
+因此当前删除边界不是 glob/prefix namespace，也不是“可由 run identity 重建即可删除”，而是：**本次 run 已实际建立 object ownership + private mode contract + exact-path identity**。这些条件缺一不可。
 
 这些 machine gates 只定义“什么样的 run 才是有效证据”，并不等于已经实际运行成功。当前尚未取得匹配 `kernel-course` self-hosted runner 上的 22/22 + 7/7 执行记录，因此 B06 状态不变。
 
