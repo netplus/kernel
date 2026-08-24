@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for command in git python3 uname grep tee mktemp rm pwd; do
+          for command in git python3 uname grep tee mktemp mkdir rm pwd; do
             command -v "$command"
           done
           os="$(uname -s)"
@@ -71,6 +71,14 @@ jobs:
           upstream_dir="${RUNNER_TEMP}/kernel-course-b06-linux-v5.10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           if [[ -e "$upstream_dir" || -L "$upstream_dir" ]]; then
             printf 'refusing pre-existing B06 scratch path: %q\n' "$upstream_dir" >&2
+            exit 1
+          fi
+          # Establish ownership by creating the exact scratch object ourselves
+          # before publishing its path to later steps. A path name alone is not
+          # evidence that a persistent-runner object belongs to this run.
+          mkdir -- "$upstream_dir"
+          if [[ ! -d "$upstream_dir" || -L "$upstream_dir" ]]; then
+            printf 'failed to establish owned B06 scratch directory: %q\n' "$upstream_dir" >&2
             exit 1
           fi
           printf 'B06_UPSTREAM_DIR=%s\n' "$upstream_dir" >> "$GITHUB_ENV"
