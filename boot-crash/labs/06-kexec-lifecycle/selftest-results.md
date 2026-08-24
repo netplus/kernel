@@ -180,9 +180,9 @@ upstream provenance and evidence:
   exactly seven PASS group lines and final 7-group PASS summary
 ```
 
-### Persistent-runner scratch ownership contract
+### Persistent-runner scratch ownership and mode contract
 
-Path identity and object ownership are separate conditions. A path that can be reconstructed from run identity is **not** automatically owned by the current run, and publishing a path name is not by itself sufficient to establish ownership of a filesystem object.
+Path identity, object ownership, and local filesystem permissions are separate conditions. A path that can be reconstructed from run identity is **not** automatically owned by the current run; publishing a path name is not by itself sufficient to establish ownership of a filesystem object; and an owned object is not accepted until its mode is explicitly verified.
 
 The current workflow therefore uses this fail-closed contract:
 
@@ -195,30 +195,38 @@ The current workflow therefore uses this fail-closed contract:
    A pre-existing object is a runner-hygiene/ownership blocker, not evidence
    that the current run may reclaim it.
 
-3. After confirming absence, prepare creates the exact directory with mkdir.
-   It then verifies that the new object is a directory and not a symbolic link.
+3. After confirming absence, prepare sets umask 077 and creates the exact
+   directory with mkdir. It then verifies that the new object is a directory
+   and not a symbolic link.
 
-4. Only after successful creation and validation does prepare publish
-   B06_UPSTREAM_DIR through GITHUB_ENV. Publication propagates ownership of
-   the object that this run has already created; it does not create ownership
-   merely by naming a path.
+4. Prepare reads the new object's mode with Python
+   os.stat(..., follow_symlinks=False) + stat.S_IMODE() and requires exactly
+   0700. This makes the scratch tree private to the runner account even when
+   the runner process inherited a permissive ambient umask. The Python check
+   avoids depending on platform-specific stat(1) output syntax.
 
-5. The always() cleanup step independently revalidates RUNNER_TEMP and run
+5. Only after successful creation, object-type validation, and mode-0700
+   validation does prepare publish B06_UPSTREAM_DIR through GITHUB_ENV.
+   Publication propagates ownership of the object that this run has already
+   created and validated; it does not create ownership merely by naming a path.
+
+6. The always() cleanup step independently revalidates RUNNER_TEMP and run
    identity, then reconstructs the same exact expected path.
 
-6. If B06_UPSTREAM_DIR was never published, cleanup has no completed ownership
+7. If B06_UPSTREAM_DIR was never published, cleanup has no completed ownership
    evidence and refuses deletion, even though it can reconstruct the expected
-   name. This also covers prepare failures before or during mkdir/validation.
+   name. This also covers prepare failures before or during mkdir/type/mode
+   validation.
 
-7. If B06_UPSTREAM_DIR was published but differs byte-for-byte from the
+8. If B06_UPSTREAM_DIR was published but differs byte-for-byte from the
    independently reconstructed path, cleanup refuses deletion.
 
-8. Only established object ownership plus published propagation plus
-   exact-path identity authorizes rm -rf. After deletion, cleanup asserts that
-   neither a path nor dangling symlink remains.
+9. Only established object ownership plus verified private mode plus published
+   propagation plus exact-path identity authorizes rm -rf. After deletion,
+   cleanup asserts that neither a path nor dangling symlink remains.
 ```
 
-This supersedes the older evidence wording that treated publication immediately after an absence check as ownership establishment. The current contract is stronger: **create → validate → publish**. It also continues to supersede still older wording that allowed prepare to remove a pre-existing exact path or cleanup to delete an unpublished path merely because the run identity could reconstruct its name.
+This supersedes the older evidence wording that treated publication immediately after an absence check as ownership establishment. The current contract is stronger: **`umask 077` → create → validate object type → validate mode `0700` → publish**. It also continues to supersede still older wording that allowed prepare to remove a pre-existing exact path or cleanup to delete an unpublished path merely because the run identity could reconstruct its name.
 
 The canonical-physical-path condition remains stronger than checking only `! -L "$RUNNER_TEMP"`: it also rejects a scratch root reached through a symlinked parent or a logical path containing `.`/`..` whose byte string differs from the filesystem's physical canonical path. Because cleanup runs under `always()`, destructive-root and run-identity validation are repeated inside cleanup rather than inherited from an earlier step.
 
