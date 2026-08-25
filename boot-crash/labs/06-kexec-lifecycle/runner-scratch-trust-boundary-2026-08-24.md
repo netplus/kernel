@@ -4,13 +4,13 @@ This note records one execution-safety boundary of `.github/workflows/boot-crash
 
 ## Finding
 
-The workflow now creates the run-specific upstream directory itself, verifies that the object is a non-symlink directory with mode `0700`, publishes the exact path only after those checks, and requires exact-path identity before cleanup.
+The workflow creates the run-specific upstream directory itself, verifies that the object is a non-symlink directory with mode `0700`, publishes the exact path only after those checks, and requires exact-path identity before final cleanup.
 
 Those controls establish privacy of the created directory's contents against ordinary access by other local users. They do **not**, by themselves, prove that an arbitrary multi-user host is safe against a hostile local user who can mutate the parent `RUNNER_TEMP` namespace.
 
-The distinction matters because mode `0700` is checked on the child object. Whether another local principal can rename, unlink, or replace a directory entry is governed by permissions and sticky-bit semantics on its parent directory. The workflow currently validates that `RUNNER_TEMP` is an existing canonical physical non-symlink directory, but it does not validate parent ownership/mode or attempt to define a hostile-local-user threat model.
+The distinction matters because mode `0700` is checked on the child object. Whether another local principal can rename, unlink, or replace a directory entry is governed by permissions and sticky-bit semantics on its parent directory. The workflow validates that `RUNNER_TEMP` is an existing canonical physical non-symlink directory, but it deliberately does not try to derive a hostile-local-user security boundary from parent mode bits. Instead, trusted parent-namespace control is a deployment prerequisite.
 
-Therefore the B06 runner contract must be read as follows:
+Therefore the B06 runner contract is:
 
 ```text
 required deployment assumption:
@@ -22,9 +22,10 @@ workflow-enforced controls:
   deterministic run-specific path identity;
   fail-closed handling of a pre-existing target;
   run-created scratch object before publication;
+  prepare-local cleanup of a run-created object if validation/publication fails;
   non-symlink directory validation;
   exact mode 0700 validation;
-  exact published-path identity before rm -rf;
+  exact published-path identity before final rm -rf;
   independent cleanup revalidation under always().
 ```
 
@@ -32,11 +33,11 @@ workflow-enforced controls:
 
 ### Wording audit of the current workflow
 
-The current `Prepare isolated upstream workspace` comment says that persistent self-hosted runners "may be multi-user" and then explains `umask 077` as keeping the scratch object private to the runner account. Read without the deployment assumption above, that wording is too broad: it can be mistaken for a claim that mode `0700` makes this job safe on an arbitrary shared host.
+The earlier workflow wording said that persistent self-hosted runners "may be multi-user" and could be read too broadly. That wording has since been corrected. The current `Prepare isolated upstream workspace` comment now states directly that the job assumes a **trusted, isolated self-hosted runner whose `RUNNER_TEMP` namespace cannot be mutated by untrusted local users**, and describes `0700` as defense in depth.
 
-For B06 evidence purposes, that comment must be interpreted narrowly: `0700` protects the child directory contents from ordinary access by other local accounts **after** the runner deployment has already guaranteed that untrusted principals cannot mutate the `RUNNER_TEMP` parent namespace. A future workflow edit should replace the broad "may be multi-user" wording with this trusted-runner assumption rather than treating child mode bits as the whole isolation boundary.
+The workflow, B06 completion review, and `selftest-results.md` therefore now express the same deployment boundary. This audit must not retain the superseded claim that the current workflow still needs that wording correction.
 
-This wording issue does not weaken the existing fail-closed deletion gates, but it matters for how a self-hosted runner is provisioned and reviewed. It is therefore classified as a runner deployment/evidence-contract issue, not as a Linux v5.10 source-contract issue.
+This deployment assumption is a runner/evidence-contract property, not a Linux v5.10 source-contract property.
 
 ## Consequence for runner setup
 
@@ -59,7 +60,9 @@ workflow scratch child:
   created by this run only;
   validated as a non-symlink directory;
   validated as mode 0700 before publication;
-  removed only after published ownership and exact-path identity agree.
+  if created but not yet published, reclaimable only by the creating prepare shell;
+  after publication, removable only when published ownership and exact-path
+  identity agree in the final cleanup step.
 ```
 
 This is consistent with the course's cost boundary: a self-hosted runner is preferred over silently switching to a potentially billable GitHub-hosted runner, but self-hosting also makes host isolation and lifecycle cleanup part of the acceptance environment.
@@ -73,4 +76,4 @@ current exact fixture: 22 tests + OK
 upstream v5.10:         7/7 source-contract groups PASS
 ```
 
-If a future workflow revision adds explicit parent-directory ownership/mode checks, this note should be revisited rather than treating the present deployment assumption as a permanent implementation guarantee.
+If a future workflow revision changes the parent-namespace trust model or adds a different object-identity mechanism, this note must be re-audited rather than treating the present deployment assumption as a permanent implementation guarantee.
