@@ -2,58 +2,9 @@
 
 This file records **tool execution evidence** for the B06 checker fixtures. It is not Linux v5.10 L1 source evidence and must not be used as a substitute for running `verify_source_contract.py` against upstream Linux v5.10 source.
 
-## 1. Upstream v5.10 correction history
+## 1. Current exact acceptance target
 
-The B06 checker has been repeatedly corrected by going back to upstream Linux v5.10 source rather than preserving assumptions from fixtures or secondary material.
-
-Established corrections include:
-
-```text
-kernel/kexec.c
-  kimage_alloc_init() returns int and returns the image through
-  struct kimage **rimage.
-
-kernel/kexec_file.c
-  kimage_file_alloc_init() likewise returns int through an out-parameter.
-  kexec_file_load() initializes dest_image to &kexec_image and overrides it
-  with &kexec_crash_image when KEXEC_FILE_ON_CRASH is set.
-
-kernel/kexec_core.c
-  sanity_check_segment_list() is a global int function in upstream v5.10,
-  not a static function.
-  kimage_alloc_control_pages() dispatches with switch (image->type), with a
-  KEXEC_TYPE_CRASH case using kimage_alloc_crash_control_pages().
-
-arch/x86/kernel/machine_kexec_64.c
-  the "Do not allocate memory ... point of no return" comment appears
-  immediately before machine_kexec(), not inside the function body.
-```
-
-## 2. Historical exact-pair PASS evidence
-
-Before the later upstream-v5.10 checker corrections and fixture expansion, an older checker/fixture pair was executed exactly and produced:
-
-```text
-Ran 9 tests
-OK
-exit code 0
-```
-
-That result is retained only as historical tool evidence. It **does not transfer** to the current checker/fixture revision.
-
-The superseded blob pair was:
-
-```text
-verify_source_contract.py
-  cd38c6c849d8c1d33449b4d01f0039c0de23c1bc
-
-test_verify_source_contract.py
-  74dc63d9e4bba24c5278224513b5a640be267478
-```
-
-## 3. Current checker/fixture revision
-
-Current repository blobs at this record update:
+Current repository blobs are:
 
 ```text
 verify_source_contract.py
@@ -63,26 +14,73 @@ test_verify_source_contract.py
   f18918cfbe0b01ffba59be3ac083a9971295a2f8
 ```
 
-The fixture contains **22 unittest cases: 1 complete positive case plus 21 negative regression cases**. The current exact pair has not yet been executed in an environment that can materialize the committed files, so the evidence state is:
+The fixture contains **22 unittest cases: 1 complete positive case plus 21 negative regression cases**. Current acceptance still requires:
+
+```text
+fixture:  Ran 22 tests / OK / exit code 0
+upstream: Linux v5.10 commit
+          2c85ebc57b3e1817b6ce1a6b703928e113a90442
+          7/7 source-contract groups PASS
+```
+
+Current evidence state:
 
 ```text
 current checker source present:                         yes
 current fixture source present:                         yes
 current fixture case count:                             22 (1 positive + 21 negative)
-current exact-pair self-test:                           not yet executed
-current exact-pair PASS:                                not established
-current exact-pair exit code:                           not established
+current exact 22-case self-test PASS:                    not established
 manual upstream-v5.10 source revalidation:              yes
 full upstream-v5.10 automated L1 checker PASS:           not established
 matching-vmlinux L2 executed:                            no
 Kexec/Kdump VM L3 executed:                              no
 ```
 
-Do not copy the historical 9-test result into the current 22-case revision.
+## 2. Historical real workflow evidence
 
-## 4. Current negative-coverage matrix
+A real GitHub Actions run has been re-audited:
 
-The 21 negative cases close the fixture-expansion subtask. They exercise each compound contract at the level where the checker makes an independent assertion:
+```text
+run id:       32230874907
+run date:     2026-08-19
+workflow:     boot-crash B06 checker self-test
+event:        push
+course SHA:   4cb6c9b6c9d870ab037e75fb2c9c9d80a25e4284
+runner:       GitHub-hosted Ubuntu 24.04
+conclusion:   success
+fixture run:  Ran 9 tests / OK
+```
+
+At that exact course revision the blobs were:
+
+```text
+verify_source_contract.py
+  5c89b67628cf55560089656d5b65e80ff74c556f
+
+test_verify_source_contract.py
+  5a3b4d41f0a0b9c46575904431136f26cc46ab5d
+```
+
+This is stronger than the older superseded-pair note because it proves that the **current checker blob** has in fact executed successfully in a real GitHub Actions job. However, it executed with the historical 9-case fixture, not the current 22-case fixture. That run also did not execute the current upstream-v5.10 7-group source checker.
+
+Therefore the permitted claim is narrowly scoped:
+
+> current checker blob + historical 9-case fixture: real workflow PASS established.
+
+The following claims remain forbidden until new execution evidence exists:
+
+```text
+current checker + current 22-case fixture: PASS
+current exact-pair 22/22: PASS
+upstream v5.10 automated 7/7: PASS
+B06 complete / ready for B07
+```
+
+The historical run used a GitHub-hosted runner. It is retained only as pre-existing evidence and does not authorize current acceptance to switch back to a potentially billable hosted runner.
+
+## 3. Why the fixture is now 22 cases
+
+The 21 negative cases close the checker-regression coverage subtask. They exercise each independent assertion used by the 7 source-contract groups:
 
 ```text
 Contract 1: load API vs image purpose
@@ -90,51 +88,48 @@ Contract 1: load API vs image purpose
   file-loader crash-purpose flag missing
 
 Contract 2: persistent image ownership
-  traditional xchg install missing
-  file-loader xchg install missing
-  traditional crash destination slot missing
-  traditional normal destination slot missing
-  file-loader crash destination slot missing
-  file-loader normal destination slot missing
+  traditional/file xchg install missing
+  traditional/file crash destination slot missing
+  traditional/file normal destination slot missing
 
 Contract 3: crashk_res destination constraint
-  crashk_res.start constraint missing
-  crashk_res.end constraint missing
-  crash-type guard inverted/missing semantically
+  crashk_res.start missing
+  crashk_res.end missing
+  crash-type guard broken
 
 Contract 4: control-page allocation policy
-  image->type switch dispatch broken
+  image->type switch broken
   KEXEC_TYPE_CRASH case missing
-  crash-specific allocator replaced by normal allocator
+  crash-specific allocator replaced
 
 Contract 5: swap_page only for non-crash images
-  traditional loader allocates swap_page for crash image
-  file loader allocates swap_page for crash image
+  traditional crash swap_page allocation
+  file-loader crash swap_page allocation
 
 Contract 6: architecture prepare before persistent install
   traditional prepare moved after xchg
   file-loader prepare moved after xchg
 
 Contract 7: x86 transition preparation and no-return boundary
-  init_pgtable preparation missing
+  init_pgtable missing
   point-of-no-return contract text missing
-  point-of-no-return contract moved after machine_kexec definition
+  point-of-no-return contract moved after machine_kexec
 ```
 
-This matrix is a **checker-regression coverage statement**, not proof that the checker accepts real upstream source. No further synthetic fixture expansion should be performed merely to increase case count. The next acceptance work is execution of the current exact suite and then execution against upstream v5.10.
+No further synthetic fixture expansion should be performed merely to increase case count. The next acceptance work is execution of the current exact suite and then execution against real upstream v5.10.
 
-## 5. Upstream v5.10 source audit
+## 4. Upstream Linux v5.10 fact baseline
 
-The source facts used by the current checker were re-audited against the upstream `v5.10` tag itself.
+The source facts used by the checker were re-audited against upstream `v5.10`:
 
 ```text
-upstream repository: torvalds/linux
-ref:                 v5.10
-commit:              2c85ebc57b3e1817b6ce1a6b703928e113a90442
-commit subject:      Linux 5.10
+repository: torvalds/linux
+ref:        v5.10
+commit:     2c85ebc57b3e1817b6ce1a6b703928e113a90442
+subject:    Linux 5.10
 ```
 
-The four source blobs read for B06 were:
+Relevant source blobs:
 
 ```text
 kernel/kexec.c
@@ -147,119 +142,115 @@ arch/x86/kernel/machine_kexec_64.c
   a29a44a98e5bef10751af769bd198d783e23b9fd
 ```
 
-The latest independent audit is recorded in [`upstream-source-audit-2026-08-24.md`](upstream-source-audit-2026-08-24.md). It reconfirmed the checker model, including crash-purpose selection, persistent normal/crash slots, `crashk_res` destination constraints, crash-specific control-page allocation, non-crash-only `swap_page`, architecture preparation before persistent installation, and x86-64 transition identity mappings. This remains **manual L1 source revalidation**, not automated checker PASS evidence.
+The latest independent audit is recorded in [`upstream-source-audit-2026-08-24.md`](upstream-source-audit-2026-08-24.md). It remains **manual L1 source revalidation**, not automated checker PASS evidence.
 
-## 6. Execution-environment blocker and cost boundary
+## 5. Pinned checkout Action: provenance versus runtime
 
-Attempts to materialize exact Git worktrees in the current execution environment have failed at DNS resolution for GitHub. This is an execution-environment blocker, not a checker failure and not a Linux v5.10 source failure. The repository workflow `.github/workflows/boot-crash-b06-selftest.yml` remains `workflow_dispatch` only and targets `[self-hosted, linux, x64, kernel-course]`; do not silently switch it to a potentially billable GitHub-hosted runner.
-
-The workflow acceptance boundary currently includes:
+The current self-hosted workflow pins:
 
 ```text
-runner prerequisites:
-  Linux x86-64; Git >= 2.18; Python >= 3.9
-  required shell tools present, including mkdir for owned scratch creation
-  RUNNER_TEMP is a non-root, existing, absolute, non-symlink, CR/LF-free,
-    canonical physical directory path
-  GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT are positive decimal integers
-
-course provenance:
-  checkout Action pinned to a full SHA
-  checked-out HEAD == GITHUB_SHA and worktree clean
-  checker blob == 5c89b67628cf55560089656d5b65e80ff74c556f
-  fixture blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
-
-fixture evidence:
-  unittest exits successfully
-  output states exactly "Ran 22 tests ..."
-  output contains standalone "OK"
-
-upstream provenance and evidence:
-  exact upstream commit 2c85ebc57b3e1817b6ce1a6b703928e113a90442
-  clean upstream worktree before and after checker
-  exactly seven PASS group lines and final 7-group PASS summary
+actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 ```
 
-### Persistent-runner scratch ownership, mode, and deployment trust contract
+The dependency audit establishes that this revision corresponds to checkout v4.4.0 and its `action.yml` declares `runs.using: node20`.
 
-Path identity, object ownership, local filesystem permissions, and the parent namespace trust boundary are separate conditions. A path that can be reconstructed from run identity is **not** automatically owned by the current run; publishing a path name is not by itself sufficient to establish ownership of a filesystem object; and an owned object is not accepted until its mode is explicitly verified.
+The real historical run `32230874907` adds an important runtime fact: its runner log states that Node 20 was deprecated and the Action was **forced to run with Node 24 by the runner**, while checkout completed successfully.
 
-The scratch child's mode `0700` is defense in depth inside a trusted runner deployment. It does **not** establish safety on an arbitrary hostile multi-user host: a local principal that can modify the parent `RUNNER_TEMP` namespace may still be able to rename, unlink, or replace directory entries regardless of the child's mode. A valid B06 self-hosted execution therefore assumes a dedicated or equivalently isolated trusted runner, a runner account not shared with untrusted interactive workloads, and a `RUNNER_TEMP` namespace that untrusted local principals cannot mutate during the job. The workflow's exact-path, ownership, and mode checks operate inside this deployment boundary rather than replacing it.
+Therefore `node20` is an Action metadata/provenance fact, not a sufficient statement of the runtime a future runner will actually select. The valid self-hosted prerequisite is:
 
-The current workflow therefore uses this fail-closed contract:
+> the selected GitHub Actions runner must be able to execute this pinned checkout Action under its actual runner/runtime policy.
+
+If checkout fails because of runner version, Action runtime policy, or runtime compatibility, classify that as a **runner / Action-runtime prerequisite failure**. Do not classify it as a B06 fixture failure or Linux v5.10 source-contract failure.
+
+## 6. Current self-hosted acceptance contract
+
+The repository workflow remains `workflow_dispatch` only and targets:
 
 ```text
-1. Prepare computes exactly:
-   $RUNNER_TEMP/kernel-course-b06-linux-v5.10-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT
-
-2. If that exact path already exists, including as a dangling symbolic link,
-   prepare fails immediately and does not delete it.
-   A pre-existing object is a runner-hygiene/ownership blocker, not evidence
-   that the current run may reclaim it.
-
-3. After confirming absence, prepare sets umask 077 and creates the exact
-   directory with mkdir. It then immediately installs a prepare-local EXIT
-   trap. That trap is authorized by this shell's successful mkdir: it may
-   reclaim only this just-created exact object while publication is incomplete.
-
-4. Prepare verifies that the new object is a directory and not a symbolic link,
-   then reads its mode with Python os.stat(..., follow_symlinks=False) +
-   stat.S_IMODE() and requires exactly 0700. This keeps the scratch tree private
-   to the runner account within the trusted parent namespace even when the
-   runner process inherited a permissive ambient umask. The Python check avoids
-   depending on platform-specific stat(1) output syntax.
-
-5. If object-type validation, mode validation, or publication fails after the
-   successful mkdir, the prepare-local EXIT trap reclaims the unpublished
-   run-owned object. This is not ownership inferred from the path name: the
-   same shell directly established ownership by creating the object after an
-   absence check.
-
-6. Only after successful creation, object-type validation, and mode-0700
-   validation does prepare publish B06_UPSTREAM_DIR through GITHUB_ENV.
-   Publication propagates ownership of the object that this run has already
-   created and validated; it does not create ownership merely by naming a path.
-   After successful publication, prepare marks the object published and removes
-   its local EXIT trap.
-
-7. The final always() cleanup step independently revalidates RUNNER_TEMP and run
-   identity, then reconstructs the same exact expected path. If
-   B06_UPSTREAM_DIR was never published, this later step has no cross-step
-   ownership evidence and refuses deletion even though it can reconstruct the
-   expected name. It must not infer ownership from path predictability.
-
-8. If B06_UPSTREAM_DIR was published but differs byte-for-byte from the
-   independently reconstructed path, final cleanup refuses deletion.
-
-9. Only a trusted/isolated RUNNER_TEMP namespace plus established object
-   ownership, verified private mode, published propagation, and exact-path
-   identity authorizes the final rm -rf. After deletion, final cleanup asserts
-   that neither a path nor dangling symlink remains.
+[self-hosted, linux, x64, kernel-course]
 ```
 
-This supersedes the older evidence wording that treated every unpublished-object failure as something only the final `always()` cleanup could consider. The current contract distinguishes two ownership scopes: **prepare-local direct ownership** exists immediately after that shell successfully creates the object and safely authorizes its local trap to reclaim an unpublished object; **cross-step ownership evidence** exists only after successful `B06_UPSTREAM_DIR` publication and is required by the later `always()` cleanup. Pre-existing/unowned objects remain fail-closed and are never reclaimed by either path.
+Do not silently switch it to a potentially billable GitHub-hosted runner.
 
-The canonical-physical-path condition remains stronger than checking only `! -L "$RUNNER_TEMP"`: it also rejects a scratch root reached through a symlinked parent or a logical path containing `.`/`..` whose byte string differs from the filesystem's physical canonical path. Because cleanup runs under `always()`, destructive-root and run-identity validation are repeated inside cleanup rather than inherited from an earlier step.
-
-The pinned checkout revision declares a Node 20 Action runtime. The dependency audit establishes that metadata identity; only a real workflow run can establish compatibility with the selected self-hosted runner. A runtime incompatibility is a runner prerequisite failure, not fixture or Linux v5.10 source-contract failure.
-
-These controls do **not** constitute execution evidence by themselves. Until a real run produces the required outputs, current 22/22 and upstream 7/7 PASS remain unestablished.
-
-## 7. Next acceptance action
-
-Fixture coverage review is closed. The next minimum acceptance unit is execution:
+Runner and execution prerequisites include:
 
 ```text
-A. materialize the exact current checker/fixture blobs;
-B. run python3 -m unittest -v test_verify_source_contract.py;
-   require 22 tests, OK, exit code 0;
-C. run the same verify_source_contract.py against upstream Linux v5.10
-   commit 2c85ebc57b3e1817b6ce1a6b703928e113a90442;
-   require all 7 source-contract groups to PASS;
-D. record dispatch GITHUB_SHA, checked-out course HEAD, checker blob SHA,
-   fixture blob SHA, upstream commit and outputs;
-E. if either execution fails, make that concrete failure the next correction
-   unit and resolve it against upstream v5.10 source before changing claims.
+Linux x86-64
+Git >= 2.18
+Python >= 3.9
+required shell tools present
+RUNNER_TEMP is non-root, existing, absolute, non-symlink, CR/LF-free,
+and equal to its pwd -P canonical physical path
+GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT are positive decimal integers
+trusted/isolated runner deployment whose RUNNER_TEMP namespace cannot be
+mutated by untrusted local principals during the job
+pinned checkout Action executable under the runner's actual Action-runtime policy
+```
+
+Course provenance gates require:
+
+```text
+checked-out HEAD == GITHUB_SHA
+course worktree clean before and after evidence production
+checker committed/worktree blob == 5c89b67628cf55560089656d5b65e80ff74c556f
+fixture committed/worktree blob == f18918cfbe0b01ffba59be3ac083a9971295a2f8
+```
+
+Fixture evidence gates require:
+
+```text
+unittest command succeeds
+output states exactly Ran 22 tests ...
+output contains standalone OK
+```
+
+Upstream provenance/evidence gates require:
+
+```text
+exact upstream commit 2c85ebc57b3e1817b6ce1a6b703928e113a90442
+clean upstream worktree before and after checker
+exactly seven numbered PASS group lines
+final PASS: 7 B06 Linux v5.10 source-contract groups
+```
+
+These controls define what a valid future run must prove. They do **not** constitute current execution evidence by themselves.
+
+## 7. Persistent-runner scratch ownership and cleanup
+
+Path identity, object ownership, child mode, and parent namespace trust are separate conditions.
+
+The workflow uses this fail-closed model:
+
+```text
+1. derive one run-specific scratch path from RUNNER_TEMP + run id + attempt;
+2. if an object already exists there, fail and never reclaim it as this run's own;
+3. umask 077 and mkdir the exact directory;
+4. install a prepare-local EXIT trap after successful mkdir;
+5. verify non-symlink directory and exact mode 0700;
+6. publish B06_UPSTREAM_DIR only after successful validation;
+7. disarm the local trap after publication;
+8. final always() cleanup independently revalidates destructive-root and run identity;
+9. final cleanup requires published ownership plus exact-path identity before rm -rf.
+```
+
+The prepare-local trap may reclaim an unpublished object only because the same shell just created it after an absence check. Later steps must never infer ownership merely from a predictable path name. A pre-existing object remains a runner-hygiene blocker.
+
+Mode `0700` is defense in depth inside a trusted runner deployment; it does not make arbitrary hostile shared-host execution safe.
+
+## 8. Execution-environment blocker and next acceptance action
+
+The current local execution environment has repeatedly failed to materialize exact Git worktrees because GitHub DNS resolution fails. That is an infrastructure blocker, not a checker or Linux source failure.
+
+The next minimum acceptance unit remains execution:
+
+```text
+A. materialize the exact current course revision/checker/fixture;
+B. run the 22-case fixture suite and require 22 tests / OK / exit 0;
+C. materialize upstream v5.10 commit
+   2c85ebc57b3e1817b6ce1a6b703928e113a90442;
+D. run the same checker and require all 7 source-contract groups PASS;
+E. record course SHA, checker blob, fixture blob, upstream commit and outputs;
+F. if execution fails, make that concrete failure the next correction unit.
 ```
 
 Do not weaken the checker merely to obtain PASS.
