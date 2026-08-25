@@ -78,6 +78,32 @@ B06 complete / ready for B07
 
 The historical run used a GitHub-hosted runner. It is retained only as pre-existing evidence and does not authorize current acceptance to switch back to a potentially billable hosted runner.
 
+### Historical failure immediately before the 9-case PASS
+
+The preceding real workflow run `32230850551` is also useful execution evidence and has now been re-audited from its job log rather than inferred from commit history:
+
+```text
+run id:       32230850551
+run date:     2026-08-19
+course SHA:   8434c3176fd27e9a607a34c6de6506c8130814c6
+runner:       GitHub-hosted Ubuntu 24.04
+conclusion:   failure
+fixture run:  Ran 9 tests / FAILED (errors=1)
+failed test:  test_complete_fixture_passes_all_contracts
+checker error:
+  missing contract: control-page type dispatch
+```
+
+The traceback shows the failure came from the check for the Linux-v5.10-shaped control-page dispatch:
+
+```text
+switch (image->type)
+```
+
+The eight negative tests in that historical fixture still passed; the complete positive fixture alone failed because it did not yet mirror the control-page `switch (image->type)` shape required by the checker. The immediately following course revision `4cb6c9b6...` updated the fixture and the real workflow became 9/9 `OK` while retaining the same current checker blob.
+
+This failure-to-pass pair is evidence that the checker was not merely returning success unconditionally: a concrete positive-fixture drift was rejected in a real workflow and the corrected fixture subsequently passed. It remains **historical 9-case tool evidence only**. It does not prove the current 22-case fixture or the upstream-v5.10 7/7 acceptance target.
+
 ## 3. Why the fixture is now 22 cases
 
 The 21 negative cases close the checker-regression coverage subtask. They exercise each independent assertion used by the 7 source-contract groups:
