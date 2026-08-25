@@ -118,7 +118,13 @@ with:
 
 ## 仓库内交叉核对
 
-当前 `.github/workflows/boot-crash-b06-selftest.yml` 仍精确使用：
+本次复核读取到的 `.github/workflows/boot-crash-b06-selftest.yml` Git blob 为：
+
+```text
+5e82a0b8c269bc8cde5a0077ebc4e4164ad22a8d
+```
+
+该 exact workflow blob 仍精确使用：
 
 ```text
 actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -126,7 +132,7 @@ actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
 并使用上节列出的五项 checkout inputs。workflow 后续还会独立核验 course HEAD、clean worktree、checker/fixture blobs，因此 Action 自身的 checkout 成功不等价于课程 provenance gate 成功。
 
-若 workflow blob、`uses:` revision 或 checkout inputs 改变，本审计必须重新核验，不能把旧依赖事实自动继承给新的执行输入。
+这里把 dependency audit 显式绑定到实际 workflow blob，而不是只绑定文件名。若 workflow 文件内容发生任何修改，Git blob 就会变化；届时必须先判断修改是否触及 `uses:` revision、checkout inputs 或与依赖执行有关的 runner contract，再决定哪些审计结论可以继续沿用。不能仅因为路径仍叫 `.github/workflows/boot-crash-b06-selftest.yml` 就把旧依赖审计自动继承给新 workflow。
 
 ## 证据边界
 
@@ -138,7 +144,9 @@ actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 3. 历史 GitHub-hosted run 证明 runner 可将该 Node-20-targeting Action
    强制运行在 Node 24，因此 metadata target != 必然的实际 runtime；
 4. 当前 checkout inputs 的语义已回到 pinned revision 官方 README 核验；
-5. 历史 run 真实执行过当前 checker blob + 当时 9-case fixture，
+5. 上述依赖核验已绑定到当前 workflow blob
+   5e82a0b8c269bc8cde5a0077ebc4e4164ad22a8d；
+6. 历史 run 真实执行过当前 checker blob + 当时 9-case fixture，
    但没有执行当前 22-case fixture，也没有建立 upstream 7/7。
 ```
 
